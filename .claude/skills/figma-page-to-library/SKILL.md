@@ -282,6 +282,153 @@ Prefer **rebuilding beside the original** when:
 - Warn the user that absolute or grouped parents can drift after swaps or rebuilds.
 - Suggest converting the parent to auto-layout only when the user wants structural cleanup, not as the default move.
 
+**Post-swap: apply properties in order**
+
+After creating or swapping to a DS component, apply the old design's properties so the new instance reflects the original intent. Execute these steps in sequence; on any failure, catch and log but **continue**—never abort the whole section because one property failed.
+
+**1. Capture old state before any changes:**
+
+```javascript
+// Read the old section's state (text, fills, icon hints)
+(async () => {
+  const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID);
+  const textMap = {};
+  const fillMap = {};
+  const instanceHints = {};
+
+  // Capture text content and sizing
+  oldNode.findAll(n => n.type === 'TEXT').forEach(t => {
+    textMap[t.name] = {
+      characters: t.characters,
+      fontSize: t.fontSize,
+      lineHeight: t.lineHeight?.value ?? null,
+    };
+  });
+
+  // Capture fill colors for rebinding to DS tokens
+  oldNode.findAll(n => n.fills?.length > 0).forEach(n => {
+    fillMap[n.name] = n.fills.map(f => ({
+      type: f.type,
+      color: f.type === 'SOLID' ? { ...f.color } : null,
+    }));
+  });
+
+  // Capture icon instance hints for matching to DS icons
+  oldNode.findAll(n => n.type === 'INSTANCE').forEach(inst => {
+    instanceHints[inst.name] = inst.mainComponent?.name ?? null;
+  });
+
+  return { textMap, fillMap, instanceHints };
+})()
+```
+
+**2. Apply text content and bind to DS text styles:**
+
+```javascript
+(async () => {
+  const textNodes = newInstance.findAll(n => n.type === 'TEXT');
+  const textStyles = await figma.getLocalTextStylesAsync();
+
+  textNodes.forEach(node => {
+    try {
+      // Restore text content (name-matched)
+      const oldText = textMap[node.name];
+      if (oldText?.characters) {
+        node.characters = oldText.characters;
+      }
+
+      // Bind to DS text style by matching font size
+      const matchingStyle = textStyles.find(s => s.fontSize === node.fontSize);
+      if (matchingStyle) {
+        node.textStyleId = matchingStyle.id;
+      }
+    } catch (err) {
+      // Log but continue to next node
+      console.warn(`Text style binding failed for ${node.name}: ${err.message}`);
+    }
+  });
+})()
+```
+
+**3. Bind fill colors to DS color variables:**
+
+```javascript
+(async () => {
+  const allVariables = figma.variables.getLocalVariables()
+    .filter(v => v.resolvedType === 'COLOR');
+
+  function findNearestColorVariable(fill) {
+    if (fill.type !== 'SOLID') return null;
+    const { r, g, b } = fill.color;
+    let best = null;
+    let bestDist = Infinity;
+
+    allVariables.forEach(v => {
+      const modeId = Object.keys(v.valuesByMode)[0];
+      const val = v.valuesByMode[modeId];
+      if (!val || typeof val !== 'object') return;
+
+      // Skip variable aliases; only match raw color values
+      if (val.type === 'VARIABLE_ALIAS') return;
+
+      const dist = Math.abs((val.r ?? 0) - r) + Math.abs((val.g ?? 0) - g) + Math.abs((val.b ?? 0) - b);
+      if (dist < bestDist) { bestDist = dist; best = v; }
+    });
+
+    // Only bind if a close match exists (distance < 0.1)
+    return bestDist < 0.1 ? best : null;
+  }
+
+  const fillableNodes = newInstance.findAll(n => n.fills?.length > 0);
+  fillableNodes.forEach(node => {
+    try {
+      const newFills = node.fills.map(fill => {
+        const colorVar = findNearestColorVariable(fill);
+        if (!colorVar) return fill;
+        return figma.variables.setBoundVariableForPaint(fill, 'color', colorVar);
+      });
+      node.fills = newFills;
+    } catch (err) {
+      console.warn(`Color binding failed for ${node.name}: ${err.message}`);
+    }
+  });
+})()
+```
+
+**4. Set icon override on button/icon components:**
+
+```javascript
+(async () => {
+  try {
+    const props = newInstance.componentProperties;
+    // Find icon property (e.g., 'Icon', 'LeftIcon', etc.)
+    const iconPropKey = Object.keys(props ?? {}).find(k =>
+      k.toLowerCase().includes('icon') && props[k].type === 'INSTANCE_SWAP'
+    );
+
+    if (!iconPropKey || !instanceHints) return;
+
+    // Extract icon name from old component (e.g., "Icons/ChevronDown")
+    const oldIconName = instanceHints[iconPropKey] ?? '';
+    const iconNameHint = oldIconName.split('/').pop(); // "ChevronDown"
+
+    // Find matching DS icon component
+    const dsIcon = figma.root.findOne(n =>
+      n.type === 'COMPONENT' &&
+      n.name.toLowerCase().includes(iconNameHint.toLowerCase())
+    );
+
+    if (dsIcon) {
+      newInstance.setProperties({ [iconPropKey]: dsIcon.id });
+    }
+  } catch (err) {
+    console.warn(`Icon override failed: ${err.message}`);
+  }
+})()
+```
+
+**On any failure:** Catch and log, but continue to the next property step. Partial success (text applied but colors failed) is better than no success.
+
 **On any failure:** Catch the error, record it with the verbatim message, and move to the next section. **Never halt the run.** Implement the fallback chain (see Step 8).
 
 ### 8. Implement the four-tier fallback chain
