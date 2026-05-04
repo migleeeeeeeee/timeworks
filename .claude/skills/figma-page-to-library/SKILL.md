@@ -63,7 +63,7 @@ All Figma I/O goes through `mcp__figma-console__*`. **Plugin API only — no RES
 - `figma_take_screenshot` — visual validation per section.
 - `figma_set_annotations` — informational stickers on rebuilt nodes.
 
-`figma_search_components` is **only** a fallback for Step 4 component discovery; prefer direct inspection of the DS file via `figma_execute`.
+`figma_search_components` and any `figma.root.findOne` / `findAll` / `findAllWithCriteria` calls against the DS file are **forbidden** — they time out on large DS files. All DS component lookup goes through the static `component-map.json` (see Step 5).
 
 ## Core rule
 
@@ -152,50 +152,40 @@ Prefer **exact keys over names**. Names are only hints.
 
 If the target frame has many nodes, walk in chunks (~200 per `figma_execute` call) to avoid the ~7s WebSocket timeout. Use a cursor pattern — return unvisited child ids when the budget is hit, then call again with each child id.
 
-### 5. Build a component map from the DS
+### 5. Load the component map
 
-**For `work-in-DS-file` mode:** All DS components are already local; skip navigation and go directly to local discovery.
+Read the static lookup file shipped with this skill:
 
-**For source-file mode:** Components are remote; use this order.
-
-Authoritative sources, in this order:
-
-1. **Existing components already in the target file.** If any instance in the target frame or page already points to a DS component, harvest its key and variant properties.
-2. **Local discovery (if working in DS file).** `figma_execute` with local component lookup:
-
-```javascript
-// ✅ Local discovery — works when operating inside the DS file
-(async () => {
-  const allComponents = figma.root.findAllWithCriteria({ types: ['COMPONENT_SET', 'COMPONENT'] });
-  return allComponents.map(c => ({
-    id: c.id,
-    key: c.key,
-    name: c.name,
-    type: c.type,
-    variantProperties: c.type === 'COMPONENT_SET' ? Object.keys(c.variantGroupProperties || {}) : null,
-  }));
-})()
+```
+.claude/skills/figma-page-to-library/component-map.json
 ```
 
-3. **Direct inspection from source file.** If not in DS file, `figma_navigate` to `https://www.figma.com/design/04x9q7W2Y59baF5MqHAVZR`, then `figma_execute` with the local discovery pattern above. Capture name, key, variant property definitions.
-4. **`figma_search_components` as last resort only.** Results may include unrelated libraries; verify any hit by direct inspection before trusting it. Node IDs expire per-session; always re-query.
+It is the authoritative DS component map. Shape:
 
-For each section in the inventory, capture the candidate(s):
+```json
+{ "Button": { "id": "46939:93756", "key": "760bd6382d70689bf1ef2beafa6f21b4519425e0" }, ... }
+```
 
-- component or component-set key (preferred) or name
-- exact variant name
+Each entry points at one specific COMPONENT (the "default" variant for variant-bearing components). Variant swapping happens at runtime via `instance.setProperties({...})` — the parent COMPONENT_SET is resolved automatically.
+
+**Never call `figma.root.findOne`, `findAll`, or `findAllWithCriteria` against the DS file.** They will time out on large DS files (7-second WebSocket limit). If a needed component is missing from the map, halt and tell the user to add it to `component-map.json` — do not fall back to searching.
+
+`figma_search_components` is similarly forbidden as a discovery path. The map is the only source.
+
+For each section in the inventory, decide:
+
+- which map entry (by name) is the right family
+- what variant properties to apply via `setProperties` after instantiation
 - one-to-one swap vs composition
 - text/instance property keys needed for overrides
 
-**Variant matching — never default blindly.** Before choosing a variant, inspect the source section for:
+**Variant matching — never default blindly.** Before choosing variant properties, inspect the source section for:
 
 - semantic cues from name, copy, usage
 - visual cues — fills, strokes, effects, radius, typography
 - existing variant-like traits in the screen (primary vs secondary buttons, etc.)
 
-Compare against available component-set variants and pick the closest. If the family is right but the variant is ambiguous, call it out instead of silently using the default.
-
-`figma_navigate` back to the source file before any writes (only if you navigated to DS; skip if already in DS file).
+If the family is right but the variant is ambiguous, call it out instead of silently using the default. The Figma component pages (Accordion, Button, etc.) document each component's available variant properties; consult them when a section's intent isn't obvious.
 
 ### 6. Decide section strategy (per section)
 
@@ -226,43 +216,36 @@ TimeWorks-specific patterns to expect:
 6. Return all mutated node ids.
 7. **Validate per section** — `figma_take_screenshot` of the section after the change, before moving on.
 
-**Local component instantiation pattern:**
+**Component instantiation pattern (use the component map; never `findOne`):**
 
 ```javascript
-// ✅ Local instantiation — works when component is in the same file (work-in-DS-file mode)
+// ✅ Same-file (work-in-DS-file mode): resolve by id
 (async () => {
-  // For a COMPONENT or leaf of a COMPONENT_SET
-  const component = figma.root.findOne(n => n.key === TARGET_KEY && n.type === 'COMPONENT');
-  if (!component) {
-    throw new Error(`Component with key ${TARGET_KEY} not found`);
-  }
-  const instance = component.createInstance();
-  // Apply text overrides, position, size here
+  const node = await figma.getNodeByIdAsync(MAP_ENTRY_ID); // from component-map.json
+  if (!node) throw new Error(`Component ${MAP_ENTRY_ID} not found in this file`);
+  const instance = node.createInstance();
+  instance.setProperties({ /* e.g. Variant: "Primary", Size: "md" */ });
   return { instanceId: instance.id };
 })()
 
-// For a variant selection from a COMPONENT_SET
+// ✅ Cross-file (source-file mode): resolve by key
 (async () => {
-  const set = figma.root.findOne(n => n.key === SET_KEY && n.type === 'COMPONENT_SET');
-  if (!set) throw new Error(`Component set with key ${SET_KEY} not found`);
-  // Find the variant matching the desired properties
-  const variant = set.children.find(c =>
-    c.type === 'COMPONENT' &&
-    c.variantProperties?.Size === 'md' &&
-    c.variantProperties?.Variant === 'primary'
-  );
-  if (!variant) throw new Error(`No matching variant found in set ${SET_KEY}`);
-  const instance = variant.createInstance();
+  const component = await figma.importComponentByKeyAsync(MAP_ENTRY_KEY); // from component-map.json
+  const instance = component.createInstance();
+  instance.setProperties({ /* variant overrides */ });
   return { instanceId: instance.id };
 })()
 ```
+
+`setProperties` walks to the parent COMPONENT_SET automatically, so swapping variants from the default works without re-resolving anything.
 
 Prefer `swapComponent()` when the existing node is already an instance of a compatible family and you want to preserve overrides:
 
 ```javascript
 (async () => {
   const oldInstance = await figma.getNodeByIdAsync(INSTANCE_ID);
-  const newComponent = figma.root.findOne(n => n.key === NEW_COMPONENT_KEY);
+  // Same-file: getNodeByIdAsync. Cross-file: importComponentByKeyAsync.
+  const newComponent = await figma.getNodeByIdAsync(MAP_ENTRY_ID);
   oldInstance.swapComponent(newComponent);
   return { success: true };
 })()
@@ -282,35 +265,24 @@ Prefer **rebuilding beside the original** when:
 - Warn the user that absolute or grouped parents can drift after swaps or rebuilds.
 - Suggest converting the parent to auto-layout only when the user wants structural cleanup, not as the default move.
 
-**Post-swap: apply properties in order**
+**Post-swap: preserve data, let DS styling work**
 
-After creating or swapping to a DS component, apply the old design's properties so the new instance reflects the original intent. Execute these steps in sequence; on any failure, catch and log but **continue**—never abort the whole section because one property failed.
+After creating or swapping to a DS component, **do not re-apply the old design's colors or typography**. DS components have correct styling built in. Instead:
+- Preserve only DATA (text content, icon references)
+- Let the new DS component define all visual styling (colors, typography, spacing)
 
-**1. Capture old state before any changes:**
+**1. Capture old state (data only, no styling):**
 
 ```javascript
-// Read the old section's state (text, fills, icon hints)
+// Read the old section's data: text content and icon references only
 (async () => {
   const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID);
   const textMap = {};
-  const fillMap = {};
   const instanceHints = {};
 
-  // Capture text content and sizing
+  // Capture ONLY text content (characters), not styling
   oldNode.findAll(n => n.type === 'TEXT').forEach(t => {
-    textMap[t.name] = {
-      characters: t.characters,
-      fontSize: t.fontSize,
-      lineHeight: t.lineHeight?.value ?? null,
-    };
-  });
-
-  // Capture fill colors for rebinding to DS tokens
-  oldNode.findAll(n => n.fills?.length > 0).forEach(n => {
-    fillMap[n.name] = n.fills.map(f => ({
-      type: f.type,
-      color: f.type === 'SOLID' ? { ...f.color } : null,
-    }));
+    textMap[t.name] = t.characters; // Just the text, no fontSize/lineHeight
   });
 
   // Capture icon instance hints for matching to DS icons
@@ -318,90 +290,38 @@ After creating or swapping to a DS component, apply the old design's properties 
     instanceHints[inst.name] = inst.mainComponent?.name ?? null;
   });
 
-  return { textMap, fillMap, instanceHints };
+  return { textMap, instanceHints };
 })()
 ```
 
-**2. Apply text content and bind to DS text styles:**
+**2. Apply text content only (let DS text styles work):**
 
 ```javascript
 (async () => {
   const textNodes = newInstance.findAll(n => n.type === 'TEXT');
-  const textStyles = await figma.getLocalTextStylesAsync();
 
   textNodes.forEach(node => {
     try {
-      // Restore text content (name-matched)
+      // Restore ONLY text content, not styling
+      // Let the DS component's text style define the typography
       const oldText = textMap[node.name];
-      if (oldText?.characters) {
-        node.characters = oldText.characters;
-      }
-
-      // Bind to DS text style by matching font size
-      const matchingStyle = textStyles.find(s => s.fontSize === node.fontSize);
-      if (matchingStyle) {
-        node.textStyleId = matchingStyle.id;
+      if (oldText) {
+        node.characters = oldText;
       }
     } catch (err) {
-      // Log but continue to next node
-      console.warn(`Text style binding failed for ${node.name}: ${err.message}`);
+      console.warn(`Text content update failed for ${node.name}: ${err.message}`);
     }
   });
 })()
 ```
 
-**3. Bind fill colors to DS color variables:**
-
-```javascript
-(async () => {
-  const allVariables = figma.variables.getLocalVariables()
-    .filter(v => v.resolvedType === 'COLOR');
-
-  function findNearestColorVariable(fill) {
-    if (fill.type !== 'SOLID') return null;
-    const { r, g, b } = fill.color;
-    let best = null;
-    let bestDist = Infinity;
-
-    allVariables.forEach(v => {
-      const modeId = Object.keys(v.valuesByMode)[0];
-      const val = v.valuesByMode[modeId];
-      if (!val || typeof val !== 'object') return;
-
-      // Skip variable aliases; only match raw color values
-      if (val.type === 'VARIABLE_ALIAS') return;
-
-      const dist = Math.abs((val.r ?? 0) - r) + Math.abs((val.g ?? 0) - g) + Math.abs((val.b ?? 0) - b);
-      if (dist < bestDist) { bestDist = dist; best = v; }
-    });
-
-    // Only bind if a close match exists (distance < 0.1)
-    return bestDist < 0.1 ? best : null;
-  }
-
-  const fillableNodes = newInstance.findAll(n => n.fills?.length > 0);
-  fillableNodes.forEach(node => {
-    try {
-      const newFills = node.fills.map(fill => {
-        const colorVar = findNearestColorVariable(fill);
-        if (!colorVar) return fill;
-        return figma.variables.setBoundVariableForPaint(fill, 'color', colorVar);
-      });
-      node.fills = newFills;
-    } catch (err) {
-      console.warn(`Color binding failed for ${node.name}: ${err.message}`);
-    }
-  });
-})()
-```
-
-**4. Set icon override on button/icon components:**
+**3. Set icon override on button/icon components (the only hard override needed):**
 
 ```javascript
 (async () => {
   try {
     const props = newInstance.componentProperties;
-    // Find icon property (e.g., 'Icon', 'LeftIcon', etc.)
+    // Find icon property (e.g., 'Icon', 'LeftIcon', 'StartIcon', etc.)
     const iconPropKey = Object.keys(props ?? {}).find(k =>
       k.toLowerCase().includes('icon') && props[k].type === 'INSTANCE_SWAP'
     );
@@ -412,22 +332,23 @@ After creating or swapping to a DS component, apply the old design's properties 
     const oldIconName = instanceHints[iconPropKey] ?? '';
     const iconNameHint = oldIconName.split('/').pop(); // "ChevronDown"
 
-    // Find matching DS icon component
-    const dsIcon = figma.root.findOne(n =>
-      n.type === 'COMPONENT' &&
-      n.name.toLowerCase().includes(iconNameHint.toLowerCase())
-    );
+    if (!iconNameHint) return; // No icon hint to work with
 
-    if (dsIcon) {
-      newInstance.setProperties({ [iconPropKey]: dsIcon.id });
+    // Icons are not in component-map.json today. If the source instance
+    // already exposes a usable icon node id via instanceHints, set it
+    // directly; otherwise leave the DS default and flag in the report.
+    const oldIconId = instanceHints[`${iconPropKey}__id`];
+    if (oldIconId) {
+      newInstance.setProperties({ [iconPropKey]: oldIconId });
     }
+    // Do NOT fall back to figma.root.findOne — it will time out on the DS file.
   } catch (err) {
     console.warn(`Icon override failed: ${err.message}`);
   }
 })()
 ```
 
-**On any failure:** Catch and log, but continue to the next property step. Partial success (text applied but colors failed) is better than no success.
+**Critical:** Do NOT capture fills, text styles, or other visual properties from the old component. Those MUST come from the DS component definition, not from old overrides. If fills or typography are wrong after the swap, the issue is likely that the DS component was substituted incorrectly (wrong component choice in Step 6), not a property application issue.
 
 **On any failure:** Catch the error, record it with the verbatim message, and move to the next section. **Never halt the run.** Implement the fallback chain (see Step 8).
 
@@ -551,7 +472,8 @@ If nothing was actually substituted, be explicit: `❌ No substitutions made —
 | "Swap component" fails with "component not found" | Component key doesn't match the target component's main component family | Verify the component key from Step 5; try a different component family |
 | `figma_execute` times out | Single call walked too many nodes | Reduce per-call budget below 200 nodes; use chunking for large frames |
 | 403 / "Invalid token" anywhere | A REST call slipped into a `figma_execute` payload | Bug — the skill should only use Plugin API (no MCP REST calls). Surface the call site and stop. |
-| `figma_search_components` returns empty | DS library isn't published as a Team Library | Expected. Rely on direct DS inspection (local discovery in Step 5) instead. |
+| `figma_execute` times out on a DS lookup | A `findOne` / `findAll` slipped into a payload | Bug — DS lookups must use `component-map.json` + `getNodeByIdAsync` / `importComponentByKeyAsync`. Surface the call site and fix. |
+| Component name not in `component-map.json` | DS added a new component since the map was generated | Halt the section, tell the user which name is missing, and ask them to add an entry. Do not fall back to `findOne`. |
 | Desktop Bridge plugin closes after one `figma_execute`; subsequent calls fail with "no active Figma instance" | A payload called `figma.closePlugin(...)` or `figma.closePluginWithFailure(...)` | Bug — payloads must `return` results and `throw` errors; never `closePlugin`. Fix the payload, restart Desktop Bridge plugin, re-run. |
 | Backup frame missing after run | Step 3 (backup creation) failed silently | Bug; check the backup creation `figma_execute` call, fix it, and re-run. |
 | All sections land in "Blocked" (no swaps or composes) | Tier 1 and 2 failed for every section; library doesn't have matching components | Expected in rare cases. Review the library composition; either add missing components or document the sections as intentionally custom. |
