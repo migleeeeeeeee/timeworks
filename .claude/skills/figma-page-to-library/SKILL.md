@@ -1,6 +1,6 @@
 ---
 name: figma-page-to-library
-description: Connects an existing Figma page or frame in a TimeWorks product file to the published Design System library — replacing detached layers, local wrappers, and one-off components with library instances or compositions of library primitives. Section-by-section, not all-at-once. Drives the figma-console MCP via Plugin API only; both the source file AND the DS library file (`04x9q7W2Y59baF5MqHAVZR`) must be open in Figma Desktop. Use when the user pastes a Figma URL with intent like "convert this page to the library", "rebuild this in the design system", "swap to library components". Does NOT generate React code — that is the figma-to-code skill.
+description: Connects an existing Figma page or frame in a TimeWorks product file to the published Design System library — replacing detached layers, local wrappers, and one-off components with library instances or compositions of library primitives. Section-by-section, not all-at-once. Drives the figma-console MCP via Plugin API only; both the source file AND the DS file named in `ds-config.json` (currently the Experiment file `gqYWCu1K6dJ9gESXtgNeCi`) must be open in Figma Desktop. Use when the user pastes a Figma URL with intent like "convert this page to the library", "rebuild this in the design system", "swap to library components". Does NOT generate React code — that is the figma-to-code skill.
 ---
 
 # figma-page-to-library
@@ -17,11 +17,11 @@ Use this skill for an existing Figma page that should reuse the published TimeWo
 - `apply-known-scope` — the user already knows which section or frame should be brought onto the design system (most common).
 - `work-in-DS-file` — the target page has already been duplicated into the DS file; the skill operates locally with no cross-file imports.
 
-If the URL points to a `PAGE` → `review-then-apply`. If it points to a `FRAME` / `SECTION` → `apply-known-scope`. If `fileKey == 04x9q7W2Y59baF5MqHAVZR` and the URL points to a duplicated product page → `work-in-DS-file`.
+If the URL points to a `PAGE` → `review-then-apply`. If it points to a `FRAME` / `SECTION` → `apply-known-scope`. If `fileKey == dsFileKey` (from `ds-config.json`) and the URL points to a duplicated product page → `work-in-DS-file`.
 
 **Prerequisites for best results:**
 
-Both the source product file AND the DS file (`04x9q7W2Y59baF5MqHAVZR`) must be open in Figma Desktop. **For smoothest workflow, manually duplicate the target page into the DS file first:**
+Both the source product file AND the DS file (key from `ds-config.json`) must be open in Figma Desktop. **For smoothest workflow, manually duplicate the target page into the DS file first:**
 
 1. In the source file, right-click the page tab
 2. Select "Move to file" or "Duplicate to file"
@@ -37,17 +37,17 @@ Correct pattern: `return` the result from the async IIFE; `throw` on error.
 
 ```javascript
 // ✅ Correct — Desktop Bridge stays alive
-(async () => {
-  const frame = await figma.getNodeByIdAsync("FRAME_ID");
+;(async () => {
+  const frame = await figma.getNodeByIdAsync("FRAME_ID")
   // ...do work...
-  return { sections };
-})()
-
-// ❌ Wrong — closes the Desktop Bridge plugin
-(async () => {
-  // ...
-  figma.closePlugin(JSON.stringify({ sections }));  // ← BRIDGE DIES HERE
-})()
+  return { sections }
+})()(
+  // ❌ Wrong — closes the Desktop Bridge plugin
+  async () => {
+    // ...
+    figma.closePlugin(JSON.stringify({ sections })) // ← BRIDGE DIES HERE
+  }
+)()
 ```
 
 Any code pattern copied from skills written for the official Figma MCP (Eden Spiekermann's `apply-design-system`, etc.) must be retargeted to use `return` / `throw`. `figma.notify(...)` is fine for visible debug output and does not affect the bridge.
@@ -82,17 +82,18 @@ Do not treat a section as "connected" just because it contains a few design-syst
 
 1. A Figma Desktop instance is connected.
 2. Source `fileKey` (parsed from the URL) is open.
-3. DS `fileKey` `04x9q7W2Y59baF5MqHAVZR` is open.
+3. DS `fileKey` (read from `.claude/skills/figma-page-to-library/ds-config.json` as `dsFileKey`) is open.
 
+Read `ds-config.json` once at the start of the run and reuse the resolved `dsFileKey` everywhere below.
 If anything is missing, halt with a specific message naming what to fix.
 
 ### 2. Determine scope
 
 Parse the URL into `fileKey` + `nodeId`.
 
-**If `fileKey == 04x9q7W2Y59baF5MqHAVZR`:** This is a `work-in-DS-file` run. The DS file contains both the library components AND the duplicated product page. Proceed normally; skip the cross-file import steps below.
+**If `fileKey == dsFileKey`:** This is a `work-in-DS-file` run. The DS file contains both the library components AND the duplicated product page. Proceed normally; skip the cross-file import steps below.
 
-**If `fileKey != 04x9q7W2Y59baF5MqHAVZR`:** This is a source-file run. Navigate to that file.
+**If `fileKey != dsFileKey`:** This is a source-file run. Navigate to that file.
 
 **Call:** `mcp__figma-console__figma_navigate` to the target URL (source file or DS file).
 
@@ -105,6 +106,7 @@ If `review-then-apply` and the page has many sections, list the top-level sectio
 **Call:** `mcp__figma-console__figma_take_screenshot` of the source target. Save URI for the deliverable.
 
 **Call:** `mcp__figma-console__figma_execute` with code that:
+
 - Duplicates the target page or frame.
 - Names the duplicate `Backup - <original name>` and places it to the right of the original.
 - Returns the backup node id.
@@ -124,25 +126,27 @@ The skill works on the **original** target. The backup is the safety net.
 Read-only inventory pattern (figma-console-mcp safe — uses `return`, NOT `figma.closePlugin`):
 
 ```javascript
-(async () => {
-  const frame = await figma.getNodeByIdAsync("FRAME_ID");
+;(async () => {
+  const frame = await figma.getNodeByIdAsync("FRAME_ID")
   if (!frame) {
-    throw new Error("Frame FRAME_ID not found on the active page");
+    throw new Error("Frame FRAME_ID not found on the active page")
   }
-  const sections = frame.findAll(n => n.type === "INSTANCE").map(inst => {
-    const mc = inst.mainComponent;
-    const cs = mc?.parent?.type === "COMPONENT_SET" ? mc.parent : null;
-    return {
-      instanceId: inst.id,
-      instanceName: inst.name,
-      componentName: mc?.name ?? null,
-      componentKey: mc?.key ?? null,
-      componentSetName: cs?.name ?? null,
-      componentSetKey: cs?.key ?? null,
-      isRemote: mc?.remote ?? false,
-    };
-  });
-  return { sections };
+  const sections = frame
+    .findAll((n) => n.type === "INSTANCE")
+    .map((inst) => {
+      const mc = inst.mainComponent
+      const cs = mc?.parent?.type === "COMPONENT_SET" ? mc.parent : null
+      return {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        componentName: mc?.name ?? null,
+        componentKey: mc?.key ?? null,
+        componentSetName: cs?.name ?? null,
+        componentSetKey: cs?.key ?? null,
+        isRemote: mc?.remote ?? false
+      }
+    })
+  return { sections }
 })()
 ```
 
@@ -220,21 +224,25 @@ TimeWorks-specific patterns to expect:
 
 ```javascript
 // ✅ Same-file (work-in-DS-file mode): resolve by id
-(async () => {
-  const node = await figma.getNodeByIdAsync(MAP_ENTRY_ID); // from component-map.json
-  if (!node) throw new Error(`Component ${MAP_ENTRY_ID} not found in this file`);
-  const instance = node.createInstance();
-  instance.setProperties({ /* e.g. Variant: "Primary", Size: "md" */ });
-  return { instanceId: instance.id };
-})()
-
-// ✅ Cross-file (source-file mode): resolve by key
-(async () => {
-  const component = await figma.importComponentByKeyAsync(MAP_ENTRY_KEY); // from component-map.json
-  const instance = component.createInstance();
-  instance.setProperties({ /* variant overrides */ });
-  return { instanceId: instance.id };
-})()
+;(async () => {
+  const node = await figma.getNodeByIdAsync(MAP_ENTRY_ID) // from component-map.json
+  if (!node) throw new Error(`Component ${MAP_ENTRY_ID} not found in this file`)
+  const instance = node.createInstance()
+  instance.setProperties({
+    /* e.g. Variant: "Primary", Size: "md" */
+  })
+  return { instanceId: instance.id }
+})()(
+  // ✅ Cross-file (source-file mode): resolve by key
+  async () => {
+    const component = await figma.importComponentByKeyAsync(MAP_ENTRY_KEY) // from component-map.json
+    const instance = component.createInstance()
+    instance.setProperties({
+      /* variant overrides */
+    })
+    return { instanceId: instance.id }
+  }
+)()
 ```
 
 `setProperties` walks to the parent COMPONENT_SET automatically, so swapping variants from the default works without re-resolving anything.
@@ -242,12 +250,12 @@ TimeWorks-specific patterns to expect:
 Prefer `swapComponent()` when the existing node is already an instance of a compatible family and you want to preserve overrides:
 
 ```javascript
-(async () => {
-  const oldInstance = await figma.getNodeByIdAsync(INSTANCE_ID);
+;(async () => {
+  const oldInstance = await figma.getNodeByIdAsync(INSTANCE_ID)
   // Same-file: getNodeByIdAsync. Cross-file: importComponentByKeyAsync.
-  const newComponent = await figma.getNodeByIdAsync(MAP_ENTRY_ID);
-  oldInstance.swapComponent(newComponent);
-  return { success: true };
+  const newComponent = await figma.getNodeByIdAsync(MAP_ENTRY_ID)
+  oldInstance.swapComponent(newComponent)
+  return { success: true }
 })()
 ```
 
@@ -268,6 +276,7 @@ Prefer **rebuilding beside the original** when:
 **Post-swap: preserve data, let DS styling work**
 
 After creating or swapping to a DS component, **do not re-apply the old design's colors or typography**. DS components have correct styling built in. Instead:
+
 - Preserve only DATA (text content, icon references)
 - Let the new DS component define all visual styling (colors, typography, spacing)
 
@@ -275,75 +284,79 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 
 ```javascript
 // Read the old section's data: text content and icon references only
-(async () => {
-  const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID);
-  const textMap = {};
-  const instanceHints = {};
+;(async () => {
+  const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID)
+  const textMap = {}
+  const instanceHints = {}
 
   // Capture ONLY text content (characters), not styling
-  oldNode.findAll(n => n.type === 'TEXT').forEach(t => {
-    textMap[t.name] = t.characters; // Just the text, no fontSize/lineHeight
-  });
+  oldNode
+    .findAll((n) => n.type === "TEXT")
+    .forEach((t) => {
+      textMap[t.name] = t.characters // Just the text, no fontSize/lineHeight
+    })
 
   // Capture icon instance hints for matching to DS icons
-  oldNode.findAll(n => n.type === 'INSTANCE').forEach(inst => {
-    instanceHints[inst.name] = inst.mainComponent?.name ?? null;
-  });
+  oldNode
+    .findAll((n) => n.type === "INSTANCE")
+    .forEach((inst) => {
+      instanceHints[inst.name] = inst.mainComponent?.name ?? null
+    })
 
-  return { textMap, instanceHints };
+  return { textMap, instanceHints }
 })()
 ```
 
 **2. Apply text content only (let DS text styles work):**
 
 ```javascript
-(async () => {
-  const textNodes = newInstance.findAll(n => n.type === 'TEXT');
+;(async () => {
+  const textNodes = newInstance.findAll((n) => n.type === "TEXT")
 
-  textNodes.forEach(node => {
+  textNodes.forEach((node) => {
     try {
       // Restore ONLY text content, not styling
       // Let the DS component's text style define the typography
-      const oldText = textMap[node.name];
+      const oldText = textMap[node.name]
       if (oldText) {
-        node.characters = oldText;
+        node.characters = oldText
       }
     } catch (err) {
-      console.warn(`Text content update failed for ${node.name}: ${err.message}`);
+      console.warn(`Text content update failed for ${node.name}: ${err.message}`)
     }
-  });
+  })
 })()
 ```
 
 **3. Set icon override on button/icon components (the only hard override needed):**
 
 ```javascript
-(async () => {
+;(async () => {
   try {
-    const props = newInstance.componentProperties;
+    const props = newInstance.componentProperties
     // Find icon property (e.g., 'Icon', 'LeftIcon', 'StartIcon', etc.)
-    const iconPropKey = Object.keys(props ?? {}).find(k =>
-      k.toLowerCase().includes('icon') && props[k].type === 'INSTANCE_SWAP'
-    );
+    const iconPropKey = Object.keys(props ?? {}).find(
+      (k) => k.toLowerCase().includes("icon") && props[k].type === "INSTANCE_SWAP"
+    )
 
-    if (!iconPropKey || !instanceHints) return;
+    if (!iconPropKey || !instanceHints) return
 
     // Extract icon name from old component (e.g., "Icons/ChevronDown")
-    const oldIconName = instanceHints[iconPropKey] ?? '';
-    const iconNameHint = oldIconName.split('/').pop(); // "ChevronDown"
+    const oldIconName = instanceHints[iconPropKey] ?? ""
+    const iconNameHint = oldIconName.split("/").pop() // "ChevronDown"
 
-    if (!iconNameHint) return; // No icon hint to work with
+    if (!iconNameHint) return // No icon hint to work with
 
     // Icons are not in component-map.json today. If the source instance
     // already exposes a usable icon node id via instanceHints, set it
     // directly; otherwise leave the DS default and flag in the report.
-    const oldIconId = instanceHints[`${iconPropKey}__id`];
+    const oldIconId = instanceHints[`${iconPropKey}__id`]
     if (oldIconId) {
-      newInstance.setProperties({ [iconPropKey]: oldIconId });
+      newInstance.setProperties({ [iconPropKey]: oldIconId })
     }
     // Do NOT fall back to figma.root.findOne — it will time out on the DS file.
   } catch (err) {
-    console.warn(`Icon override failed: ${err.message}`);
+    console.warn(`Icon override failed: ${err.message}`)
   }
 })()
 ```
@@ -356,12 +369,12 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 
 When a section cannot be handled at Tier 1 (exact match), implement this chain. **Complete all sections; never halt.**
 
-| Tier | Strategy | Action | Report As |
-|------|----------|--------|-----------|
-| 1 | **exact-swap** | Find a single DS component that matches the section's job exactly. Swap or rebuild with a single instance. | `🔄 swapped` |
-| 2 | **compose-from-primitives** | If no single component fits, rebuild the section using 2+ DS primitives (e.g., Avatar + Text + Button). | `🔄 composed` |
-| 3 | **annotate-and-preserve** | If the library has no suitable components, keep the node as-is and attach an annotation explaining why. | `✓ annotated as-is` |
-| 4 | **flag-and-skip** | For truly bespoke or blocked nodes, leave untouched and flag in the report. | `❌ blocked: <reason>` |
+| Tier | Strategy                    | Action                                                                                                     | Report As              |
+| ---- | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 1    | **exact-swap**              | Find a single DS component that matches the section's job exactly. Swap or rebuild with a single instance. | `🔄 swapped`           |
+| 2    | **compose-from-primitives** | If no single component fits, rebuild the section using 2+ DS primitives (e.g., Avatar + Text + Button).    | `🔄 composed`          |
+| 3    | **annotate-and-preserve**   | If the library has no suitable components, keep the node as-is and attach an annotation explaining why.    | `✓ annotated as-is`    |
+| 4    | **flag-and-skip**           | For truly bespoke or blocked nodes, leave untouched and flag in the report.                                | `❌ blocked: <reason>` |
 
 **Error handling rule:** When Tier 1 fails, catch the error and attempt Tier 2. When Tier 2 fails or doesn't apply, fall through to Tier 3. When Tier 3 is not applicable (bespoke node), use Tier 4. Never re-throw; always record the error and proceed to the next section.
 
@@ -369,22 +382,22 @@ Example:
 
 ```javascript
 // Tier 1: Exact match?
-const exactComponent = dsComponentMap.find(c => c.name === NEEDED_COMPONENT);
+const exactComponent = dsComponentMap.find((c) => c.name === NEEDED_COMPONENT)
 if (exactComponent) {
   // Tier 1 succeeded
-  return { tier: 1, componentKey: exactComponent.key };
+  return { tier: 1, componentKey: exactComponent.key }
 }
 
 // Tier 2: Compose from primitives?
-const Icon = dsComponentMap.find(c => c.name === 'Icon');
-const Text = dsComponentMap.find(c => c.name === 'Text');
+const Icon = dsComponentMap.find((c) => c.name === "Icon")
+const Text = dsComponentMap.find((c) => c.name === "Text")
 if (Icon && Text) {
   // Tier 2 succeeded
-  return { tier: 2, primitives: ['Icon', 'Text'] };
+  return { tier: 2, primitives: ["Icon", "Text"] }
 }
 
 // Tier 3: Preserve as-is
-return { tier: 3, reason: 'No DS equivalent; preserved with annotation' };
+return { tier: 3, reason: "No DS equivalent; preserved with annotation" }
 ```
 
 ### 9. Validate what actually changed
@@ -410,6 +423,7 @@ docs/superpowers/runs/YYYY-MM-DD-<source-file-slug>-<page-name>-conversion.md
 ```
 
 **Report accuracy rules:**
+
 - Only list a section under "Swapped" if the node is now a library instance (`mainComponent.remote === true`) OR was created fresh from a local DS component with `mainComponent.key` matching a known DS key.
 - Only list a section under "Composed" if at least one of the component instances is newly created from a DS primitive or swapped.
 - If a section has NO changes, it must appear in "Already connected" (if it was already a DS instance) or "Blocked" (if unconverted), NOT in "Swapped" or "Composed".
@@ -441,10 +455,10 @@ Format:
 
 ## Screenshots
 
-| Stage | Source | Result |
-|---|---|---|
-| Full target | <URI> | <URI> |
-| <section name> | <URI> | <URI> |
+| Stage          | Source | Result |
+| -------------- | ------ | ------ |
+| Full target    | <URI>  | <URI>  |
+| <section name> | <URI>  | <URI>  |
 
 ## Backup
 
@@ -466,18 +480,18 @@ If nothing was actually substituted, be explicit: `❌ No substitutions made —
 
 ## Failure modes
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `figma_get_status` reports either file not open | DS or source not loaded in Figma Desktop | Open both in Figma Desktop and re-run |
-| "Swap component" fails with "component not found" | Component key doesn't match the target component's main component family | Verify the component key from Step 5; try a different component family |
-| `figma_execute` times out | Single call walked too many nodes | Reduce per-call budget below 200 nodes; use chunking for large frames |
-| 403 / "Invalid token" anywhere | A REST call slipped into a `figma_execute` payload | Bug — the skill should only use Plugin API (no MCP REST calls). Surface the call site and stop. |
-| `figma_execute` times out on a DS lookup | A `findOne` / `findAll` slipped into a payload | Bug — DS lookups must use `component-map.json` + `getNodeByIdAsync` / `importComponentByKeyAsync`. Surface the call site and fix. |
-| Component name not in `component-map.json` | DS added a new component since the map was generated | Halt the section, tell the user which name is missing, and ask them to add an entry. Do not fall back to `findOne`. |
-| Desktop Bridge plugin closes after one `figma_execute`; subsequent calls fail with "no active Figma instance" | A payload called `figma.closePlugin(...)` or `figma.closePluginWithFailure(...)` | Bug — payloads must `return` results and `throw` errors; never `closePlugin`. Fix the payload, restart Desktop Bridge plugin, re-run. |
-| Backup frame missing after run | Step 3 (backup creation) failed silently | Bug; check the backup creation `figma_execute` call, fix it, and re-run. |
-| All sections land in "Blocked" (no swaps or composes) | Tier 1 and 2 failed for every section; library doesn't have matching components | Expected in rare cases. Review the library composition; either add missing components or document the sections as intentionally custom. |
-| Page duplicated into DS file but skill refuses to run on it | Skill treating DS file as library-only (Step 2 check) | Ensure the page is actually copied into the DS file (fileKey should be `04x9q7W2Y59baF5MqHAVZR`). Retry. If this is a new page, re-run with `figma_navigate` to the DS file URL first. |
+| Symptom                                                                                                       | Likely cause                                                                     | Fix                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `figma_get_status` reports either file not open                                                               | DS or source not loaded in Figma Desktop                                         | Open both in Figma Desktop and re-run                                                                                                                                                  |
+| "Swap component" fails with "component not found"                                                             | Component key doesn't match the target component's main component family         | Verify the component key from Step 5; try a different component family                                                                                                                 |
+| `figma_execute` times out                                                                                     | Single call walked too many nodes                                                | Reduce per-call budget below 200 nodes; use chunking for large frames                                                                                                                  |
+| 403 / "Invalid token" anywhere                                                                                | A REST call slipped into a `figma_execute` payload                               | Bug — the skill should only use Plugin API (no MCP REST calls). Surface the call site and stop.                                                                                        |
+| `figma_execute` times out on a DS lookup                                                                      | A `findOne` / `findAll` slipped into a payload                                   | Bug — DS lookups must use `component-map.json` + `getNodeByIdAsync` / `importComponentByKeyAsync`. Surface the call site and fix.                                                      |
+| Component name not in `component-map.json`                                                                    | DS added a new component since the map was generated                             | Halt the section, tell the user which name is missing, and ask them to add an entry. Do not fall back to `findOne`.                                                                    |
+| Desktop Bridge plugin closes after one `figma_execute`; subsequent calls fail with "no active Figma instance" | A payload called `figma.closePlugin(...)` or `figma.closePluginWithFailure(...)` | Bug — payloads must `return` results and `throw` errors; never `closePlugin`. Fix the payload, restart Desktop Bridge plugin, re-run.                                                  |
+| Backup frame missing after run                                                                                | Step 3 (backup creation) failed silently                                         | Bug; check the backup creation `figma_execute` call, fix it, and re-run.                                                                                                               |
+| All sections land in "Blocked" (no swaps or composes)                                                         | Tier 1 and 2 failed for every section; library doesn't have matching components  | Expected in rare cases. Review the library composition; either add missing components or document the sections as intentionally custom.                                                |
+| Page duplicated into DS file but skill refuses to run on it                                                   | Skill treating DS file as library-only (Step 2 check)                            | Ensure the page is actually copied into the DS file (fileKey should match `dsFileKey` in `ds-config.json`). Retry. If this is a new page, re-run with `figma_navigate` to the DS file URL first. |
 
 ## When NOT to use this skill
 
