@@ -117,24 +117,26 @@ export { Sidebar, type SidebarProps, type SidebarSection, type SidebarItem }
 
 ## Tokens
 
-All values resolve to existing tokens — **no new tokens expected**:
+Token mapping resolved against the live Color Tokens collection in `gqYWCu1K6dJ9gESXtgNeCi` (Light/Dark/Black modes). No new tokens required — gaps in the original spec (tertiary text, focus ring) are absorbed by existing tokens per user decision 2026-05-11 ("use existing tokens, rhythm carries hierarchy").
 
-| Role | Token |
-|---|---|
-| Panel surface | `--color-background-color` |
-| Row hover surface | `--color-background-hover-color` |
-| Row active surface | `--color-background-selected-color` |
-| Active label/icon | `--color-text-color` |
-| Inactive label | `--color-text-color-secondary` |
-| Inactive icon | `--color-text-color-tertiary` |
-| Section title | `--color-text-color-tertiary` |
-| Divider | `--color-border-color-subtle` |
-| Focus ring | `--color-border-focus-color` |
-| Group-active dot | `--color-primary-color` |
+| Role | Figma variable | CSS var |
+|---|---|---|
+| Panel surface | `ui-background-color` | `--color-ui-background-color` |
+| Row hover surface | `primary-background-hover-color` | `--color-primary-background-hover-color` |
+| Row active surface | `primary-selected-color` | `--color-primary-selected-color` |
+| Active row hover | `primary-selected-hover-color` | `--color-primary-selected-hover-color` |
+| Active label + icon | `primary-text-color` | `--color-primary-text-color` |
+| Inactive label | `secondary-text-color` | `--color-secondary-text-color` |
+| Inactive icon | `secondary-text-color` | `--color-secondary-text-color` |
+| Section title | `secondary-text-color` | `--color-secondary-text-color` |
+| Divider | `layout-border-color` | `--color-layout-border-color` |
+| Focus ring | `primary-color` | `--color-primary-color` |
+| Group-active dot | `primary-color` | `--color-primary-color` |
+| Disabled text/icon | `disabled-text-color` | `--color-disabled-text-color` |
 | Spacing | `--space-12 / 16 / 20 / 24 / 32` |
 | Type | `text-t3` + Tailwind uppercase + tracking |
 
-If any of these is missing in the live token export, the `figma-design` step halts and we add it in Tokens Studio first per CLAUDE.md "Tokens" rules.
+Hierarchy now relies on vertical rhythm + weight rather than a third text-color step. Inactive icons sit at the same color as inactive labels (`secondary-text-color`); the larger row height, uppercase labels, and section gaps carry the "airy / scannable" effect from the reference.
 
 ## Work order
 
