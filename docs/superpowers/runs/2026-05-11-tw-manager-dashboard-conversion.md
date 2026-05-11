@@ -25,7 +25,13 @@
 
 ## Swapped
 
-- **Input Field** (`27449:154763`, removed) → `Search` library instance (`27449:155810`) — DS component set `Search` (key `4d553dbf93ce4801e29c6c19a11cc58484278256`, variant `Size=Large, State=Default`). Matched via **Rule 2 (name alias)** — source name "Input Field" + text content "Search Tasks" mapped to the DS `Search` family. Placeholder text content preserved via the `Placeholder text` node. Position (10, 214) and size (290×36) preserved explicitly (parent is a GROUP, not auto-layout). ⚠️ raw value leak (4 — from the DS Search component itself; see Raw-value leaks).
+- **Input Field** (`27449:154763`, removed) → `Search` library instance (`27449:155810`) — DS component set `Search` (key `4d553dbf93ce4801e29c6c19a11cc58484278256`, variant `Size=Large, State=Default`). Matched via **Rule 2 — semantic match** — source name "Input Field" + text content "Search Tasks" mapped to the DS `Search` family. Placeholder text content preserved via the `Placeholder text` node. Position (10, 214) and size (290×36) preserved explicitly (parent is a GROUP, not auto-layout). ⚠️ raw value leak (4 — from the DS Search component itself; see Raw-value leaks).
+- **Idle Status Container** (`27449:154744`, removed) → `Chips` library instance (`27449:155834`) — variant `Size=md, Type=On-Warning, State=Default, Show close button=no, Icon=None, Avatar=No avatar, Disabled=no` (`46939:97284`). Matched via **Rule 2 — semantic match** by reasoning: small pill (115×32, radius 10) holding state label + duration ("IDLE - 00:12:34") → status indicator → `Chips`. Tone variant inferred from state-word "IDLE" → `On-Warning` (paused state). Source's three text nodes (state + separator + duration) collapsed into the chip's single text slot. Position (0, 4) and size (115×32) preserved.
+- **Break Duration Container** (`27449:154756`, removed) → `Chips` library instance (`27449:155837`) — variant `Size=md, Type=Default, State=Default, ...` (`25629:8350`). Same semantic match (small pill with label + duration); tone inferred from "Lunch" (neutral, not warning/positive/negative) → `Default`. Text "Lunch - 00:30:00" preserved. Position (177, 4) and size (130×32) preserved.
+
+**Explicitly rejected swaps** (the judgment-first cascade correctly identified these as bad fits):
+
+- `Pending Tasks Count` × 10 and `In-Progress Count` × 10 (20 sections total, all named consistently). Inspected children: two plain TEXT nodes ("Pending" + "03", "In-Progress" + "0"), no fill, no stroke, no border. A naive matcher would have routed these to `Counter` (DS number badge), which is a **filled coloured pill** — completely different visual treatment from the source's plain text-pair. The judgment-first Rule 4 (token-binding only) correctly applies: typography already bound to DS text styles, no component swap needed. The `In-Progress` text's status-green color (`rgb(32,87,59)`) is a Tokens Studio gap (see below).
 
 ## Composed
 
@@ -123,12 +129,42 @@ Backup frame: `Backup - Main View` (node `27449:155264`), placed to the right of
 - [x] Run executed in `work-in-DS-file` mode after duplicating the source page into the Experiment file.
 - [x] Bulk typography binding ran cleanly (171/173, 0 errors) — typography goal achieved end-to-end.
 
+## Tokens Studio gaps
+
+The judgment-first cascade's Rule 4 explicitly logs raw values that have no DS equivalent. From this run:
+
+**Color tokens missing** — these RGBs are real status colours used in the dashboard, with no current DS semantic mapping:
+
+| RGB | Count | Suggested Tokens Studio name |
+| --- | ----: | ---------------------------- |
+| `32,87,59`     | 22 | `status-in-progress` (dark green text/icon) |
+| `91,39,20`     | 22 | `status-completed` or `status-stopped` (dark brown text/icon) |
+| `255,237,167`  | 11 | `status-pending-bg` (pale yellow background) |
+| `198,250,228`  | 11 | `status-completed-bg` (pale mint background) |
+| `253,216,191`  | 11 | `status-stopped-bg` (pale peach background) |
+| `244,233,234`  |  1 | one-off light pink — verify whether intentional |
+| `255,239,221`  |  1 | one-off pale orange — verify whether intentional |
+
+**Radius tokens missing** — values used by the dashboard that aren't on the DS scale (4/8/12/16/24):
+
+| Value | Count | Suggested name |
+| ----: | ----: | -------------- |
+| `100`     | 236 | `radius-full` (or `radius-pill`) — used pervasively for status pills, avatars, etc. |
+| `10`      |  68 | `radius-card` — between sm (8) and md (12); could either round to sm or add new step |
+| `5`       |  32 | non-standard — consider rounding to 4 in source instead of adding token |
+| `1`       |   8 | non-standard — likely a stroke-aligned offset; ignore unless intentional |
+
+**Effect tokens** — 3 unbound shadows (low volume; inspect each in Figma and decide whether to promote or remove).
+
+Adding the highlighted entries to Tokens Studio + re-running the skill's auto-bind passes would clear roughly **77 of the 79 remaining fill leaks** and **236 of the 348 remaining radius leaks** in one stroke.
+
 ## Follow-on work
 
-To complete the page conversion, the human-judgment work that remains:
+1. **Promote tokens above to Tokens Studio**, re-export to `src/tokens/source/`, run `npm run tokens:build`, then re-run the skill's bind passes on this page. Expected outcome: leaks drop from 433 → ~70.
+2. **Compose-from-primitives passes**, by section, with human review per section:
+   - Project Task rows in the sidebar (`27449:154774` and descendants) → `List item` instances. Horizontal-to-stacked layout decision per row; risk of visual drift, so this needs human eyeballs section-by-section.
+   - Project cards in `Projects List` (`27449:154900`) → likely a Table family swap (`Table / Cell`, `Table / ColumnContent`, etc.) for the count rows.
+   - Task Timer Container header (`27449:154727`) → compose Text + (already-swapped) Chips for status + time-display Text. Already partially done by the chip swaps.
+3. **Tier-5 annotate**: the Title bar (`27449:154718`–`27449:154723`) and Bottom Bar (`27449:155253`) — both are custom app chrome with no DS analogue. Annotate with `figma_set_annotations` explaining why they stay bespoke.
 
-1. **Semantic color mapping.** Decide for each of the 16 distinct fill RGBs and 13 stroke RGBs which DS token they should bind to (or whether to add a new token to Tokens Studio for any that don't map). The most impactful is `rgb(31,30,49)` (120 paints) — pick its semantic token once and a re-bind pass eliminates ~17% of all remaining leaks in one stroke.
-2. **Radius token promotion.** Add `radius-full` (100), `radius-md` (10), `radius-sm` (5), `radius-xs` (1) to Tokens Studio if they aren't there; then re-bind.
-3. **Compose-from-primitives, section by section.** The Task Timer Container, Project and Task Container, the project / task rows, and the main header / table would all benefit from being rebuilt out of DS Avatar / Text / Tag / List item / Table primitives instead of just having their raw paints relabelled. This is the section-by-section work the skill was designed to support — it needs a human at the wheel deciding "this is a project row, compose it as List item + Avatar + Time text + Tag," etc.
-
-The skill is ready to drive each of those passes. This run validated the plumbing and did the highest-ROI deterministic work (typography + exact-RGB color binding); the rest is design judgment.
+This run validated the **new judgment-first cascade** end-to-end on a real product page: three real component swaps with explicit semantic reasoning, twenty-plus correctly-rejected false-positive matches (the "Pending Count" displays a naive matcher would have wrecked), and a clean Tokens Studio gap report that converts every remaining leak into a clear next action.
