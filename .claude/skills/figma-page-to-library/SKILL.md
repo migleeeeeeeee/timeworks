@@ -250,26 +250,24 @@ Typical compositions:
 
 #### Rule 4 — Token binding only (no component swap)
 
-When the section has no obvious DS component but is just text + simple shapes (e.g. a section heading, a label, a divider), do not swap. Instead:
+When the section has no obvious DS component but is just text + simple shapes (e.g. a section heading, a label, a divider), do not swap. Instead **bind every value to the nearest available DS token**. The DS has what it has — never report a value as "missing from the DS" or "needs a new token." Always pick the closest existing match and move on.
 
-1. Bind every TEXT to the nearest DS text style by fontSize + weight.
-2. Bind every SOLID fill / stroke to a DS color variable. Prefer semantic tokens (`primary-text-color`, `secondary-text-color`, `ui-background-color`, `ui-border-color`) when the source RGB is a neutral; reserve named brand colors for accents.
-3. Bind every non-zero corner radius to a `space-*` token if its value matches the DS scale (4/8/12/16/24). If the value is non-standard (e.g. 100 for pill, 10, 5), record it as a **Tokens Studio gap** in the report rather than guessing.
+1. **Typography** — bind every TEXT to the nearest DS text style by fontSize + weight. Snap source `fontSize` to the closest bucket on the DS scale (32 / 24 / 18 / 16 / 14 / 12). Map source weight to the closest available style on that size (Bold / SemiBold / Medium / Regular / Light).
+2. **Colors (fills + strokes)** — bind every SOLID fill / stroke to the DS color variable whose resolved RGB is closest by Euclidean distance:
+   - First **prefer semantic tokens** when the source RGB is clearly a neutral. Build a small priority list — `primary-text-color`, `secondary-text-color`, `primary-background-color`, `ui-background-color`, `ui-border-color`, `text-color-on-primary` — and snap to the closest of those for any neutral grey/black/white source.
+   - For accent / brand / status colors that don't match a neutral, scan **all** color variables in the `Color Tokens` collection and pick the minimum-distance match.
+   - For pale fills, the `*-selected` variants (`warning-color-selected`, `positive-color-selected`, `negative-color-selected`, etc.) are usually the right family — they're the DS's pale-background palette.
+   - **Never leave a SOLID paint raw.** If a paint has no `boundVariables.color`, bind it to *something* from the DS, even if the visual is only approximate. Approximate-from-DS beats raw-but-exact every time.
+3. **Corner radii** — bind every non-zero unbound radius to the nearest `space-*` token (the DS reuses spacing tokens for radii). Snap to the closest available value (`2 / 4 / 8 / 12 / 16 / 20 / 24 / 32`). Source radii larger than 32 (pills, fully-rounded) snap to `space-32` as the largest available approximation; the visual difference is acceptable because the DS doesn't expose a pill radius.
+4. **Effects** — if a node has unbound shadows and any DS effect style exists, bind to the closest by intent (drop-shadow → `shadow-md` family). If no DS effect style applies, leave raw and note in the report.
 
 This rule applies to the **majority** of leaf elements on most product pages and is responsible for the bulk of "fonts / colors use the style, not raw values" outcomes.
 
+**Why nearest-match, not exact-match:** the user's design-system memory explicitly says *"page-to-library is substitution, not gap-flagging — skill must adapt page to existing library; never halt or ask to extend library."* The skill's job is to bring the source page into the DS as far as it goes, then stop. Source values without exact DS equivalents are not the skill's problem to flag; they are bound to the closest approximation and the run moves on.
+
 #### Rule 5 — Annotate-and-preserve (fall through)
 
-Only when Rules 1–4 all fail (truly bespoke chrome, no token equivalent, no semantic match): annotate the node with `figma_set_annotations` explaining why and leave it alone. Examples: custom app titlebars, bespoke marketing illustrations, demo placeholders that aren't part of the product.
-
-#### Tokens Studio gap reporting
-
-While running Rule 4, the skill collects raw values that have no DS equivalent (status palette RGBs, non-standard radii, custom shadows). In Step 10's report, surface these as a **`## Tokens Studio gaps`** section so the human can decide whether to:
-
-- Promote them to a new token family (e.g. add `status-idle`, `status-working`, `radius-full` to Tokens Studio), or
-- Rebuild the affected sections with DS primitives that bring their own styling.
-
-This converts every "leak" into either a Tokens Studio task or a compose-from-primitives task — both are clear next actions, neither is the skill's failure.
+Only when Rules 1–4 all fail (truly bespoke chrome with no semantic match, e.g. custom app titlebar, marketing illustration): annotate the node with `figma_set_annotations` explaining why and leave it alone. This rule is meant to be **rare** — token binding under Rule 4 should catch nearly everything; Rule 5 only applies to nodes that aren't candidates for either a component swap or token binding (image fills, complex bespoke vectors, etc.).
 
 **Variant matching — never default blindly.** When Rule 1 or Rule 2 yields a family but the variant is genuinely ambiguous, instantiate the default, flag the section with `⚠️ variant ambiguous` in the report, and move on. The Experiment file's component pages document each component's variant properties; consult them when intent is unclear.
 
