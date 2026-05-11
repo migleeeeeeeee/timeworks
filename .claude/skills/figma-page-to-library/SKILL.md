@@ -590,6 +590,7 @@ docs/superpowers/runs/YYYY-MM-DD-<source-file-slug>-<page-name>-conversion.md
 - Only list a section under "Composed" if at least one of the component instances is newly created from a DS primitive or swapped.
 - If a section has NO changes, it must appear in "Already connected" (if it was already a DS instance) or "Blocked" (if unconverted), NOT in "Swapped" or "Composed".
 - If ALL sections are blocked, open the report with `❌ No substitutions made — see Blocked section for details` before any other content.
+- The `## Raw-value leaks` section is always present. If empty, render `✓ No raw values detected.`; otherwise list every entry returned by Step 9.5. Leaks annotate their parent section line with `⚠️ raw value leak (N)` but do not change its bucket.
 
 Format:
 
@@ -615,6 +616,11 @@ Format:
 - <section name> — reason: <verbatim error or library-not-enabled> — node `<id>`
 - ...
 
+## Raw-value leaks
+
+- <nodeName> (`<nodeId>`) — <property>: <rawValue>
+- ...
+
 ## Screenshots
 
 | Stage          | Source | Result |
@@ -628,6 +634,10 @@ Backup frame: `Backup - <original name>` (node `<id>`)
 ```
 
 If nothing was actually substituted, be explicit: `❌ No substitutions made — the target was cloned but no components were upgraded. See Blocked section for details.`
+
+If the Step 9.5 walker returned an empty `leaks` array, render the section as `✓ No raw values detected.` instead of the bullet list. The section is **always present** — never omitted.
+
+For each section in `## Swapped` or `## Composed` that contained at least one leak, append ` ⚠️ raw value leak (N)` to its line (where N is the leak count for that section). The leak marker does **not** demote the section to Blocked.
 
 ## Writing rules
 
