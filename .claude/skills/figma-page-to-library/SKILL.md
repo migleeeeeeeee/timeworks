@@ -239,7 +239,39 @@ Evaluate the **detection table** top-to-bottom. First match wins:
 
 **Sweep ordering.** Process detected components **outermost-first**. Once a node is replaced by an instance, do NOT also try to match its descendants (the new instance owns them). Skip any node that lives under a replaced ancestor.
 
+**Per-instance variant selection — NEVER use one variant for a whole group.** When the sweep finds multiple candidates that match the same DS family (e.g. 44 count chips, 6 Details buttons), evaluate each instance's own signature for variant selection. Two chips in the same page can need different `Type` variants because their text content carries different semantics:
+
+- "Pending" / "Pending Tasks" / "Awaiting" → `Type=On-Warning` (yellow tone — waiting / paused)
+- "In-Progress" / "Working" / "Active" → `Type=On-Positive` (green tone — active / forward)
+- "Completed" / "Done" / "Finished" → `Type=On-Positive` (success tone)
+- "Over Due" / "Late" / "Error" / "Failed" / "Stopped" → `Type=On-Negative` (red tone — error / blocker)
+- "Lunch" / "Break" / neutral informational labels → `Type=Default`
+- Plain count badges with no semantic word → `Type=Primary` or `Type=Default`
+
+The same idea applies to **every component family**:
+
+- **Buttons** — `Kind=Primary` when source has a solid filled background with brand/strong colour; `Kind=Secondary` when has fill + stroke; `Kind=Tertiary` when stroke-only or no visual treatment. `Color=Negative` when text reads "Delete" / "Remove" / "Cancel" with red treatment.
+- **Icon Buttons** — same Kind/Color logic; size from h.
+- **Searches** — size from h; State=Default unless source shows a focus/typed state.
+- **Avatars** — size from w; placeholder vs image vs initial from fills.
+
+Pick variants **per instance**, not per group.
+
 **Variant ambiguity.** If the family is right but variant is genuinely ambiguous after applying the inference rules, instantiate the default and flag `⚠️ variant ambiguous` — do not silently pick.
+
+#### Bare-icon swap (own dedicated pass)
+
+After the component sweep finishes, run a **separate pass** for bare icons. The skill ships an `icon-map.json` with ~298 canonical icons; every leftover VECTOR or single-VECTOR-wrapping FRAME that wasn't absorbed into a component swap is a candidate.
+
+For each candidate (≤24×24 standalone VECTOR, or FRAME ≤24×24 wrapping a single VECTOR):
+
+1. **Name match.** Lowercase the source name (the FRAME's name first, then the VECTOR's name). Strip punctuation. Try direct hits against `icon-map.json` keys (`Play Icon Container` → strip suffix → match `play` → resolves to `circle-play` if present). Common parent-name suffixes to strip: `Container`, `Wrapper`, `Icon`, `Box`.
+2. **Hint match.** Many product files use semantic naming hints: `Play` → `circle-play`, `Pause` → `circle-pause`, `Close` → `xmark` / `circle-xmark` / `x-mark small`, `Logo` → leave (no DS equivalent), `Chevron` → `chevron-{up/down/left/right}`.
+3. **Sibling content.** If the icon sits inside a row whose text mentions a clear action ("Search", "Delete", "Edit"), try the matching DS icon name.
+4. **On match:** instantiate the icon component from `icon-map.json`, place it at the source's position, resize to source dimensions, then remove the source VECTOR/FRAME.
+5. **On no match:** leave the source as-is and flag `⚠️ unmatched icon: <name>` in the report. **Never** invent an icon.
+
+This pass keeps the icon library wired into the conversion outcome instead of leaving bare VECTORs everywhere.
 
 #### Rule 3 — Compose from primitives (when no single component fits)
 
@@ -368,6 +400,15 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 - Preserve only DATA (text content, icon references)
 - Let the new DS component define all visual styling (colors, typography, spacing)
 
+**CRITICAL — text-preservation must be bulletproof.** Setting an instance text property via `setProperties({...})` is **not enough**. The property value updates, but the bound text node inside the instance often does NOT propagate (variant binding quirks, instance overrides). Every swap must:
+
+1. **Call `setProperties` first** to update any matching text properties on the instance (Button text, Chip text, Label, Placeholder, etc.).
+2. **Read back every TEXT descendant** of the new instance and check whether its `characters` matches the source content.
+3. **If any TEXT descendant still shows the DS default** (e.g. "This is a chip", "Option 1", "Button label"), **force-override** by loading the font and setting `t.characters` directly.
+4. **Verify the final state** — re-read the text node and assert the content is right before moving on.
+
+Skipping any of these steps will leave DS placeholder strings ("This is a chip", "Option 1") in the final result.
+
 **1. Capture old state (data only, no styling):**
 
 ```javascript
@@ -395,26 +436,63 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 })()
 ```
 
-**2. Apply text content only (let DS text styles work):**
+**2. Apply text content with the bulletproof two-step pattern.**
+
+Always do BOTH steps in order — never skip the verification + force-override step. `setProperties` looks like it works but silently fails for many variants; the only way to guarantee the final text is right is to write directly to the text node.
 
 ```javascript
 ;(async () => {
+  // STEP A — set every matching text property on the instance
+  const props = newInstance.componentProperties || {}
+  const textProps = Object.entries(props).filter(([k, v]) => v.type === "TEXT")
+
+  // Compute the desired combined text per logical slot. For a chip showing
+  // ["Pending", "03"] in two text nodes, joinedText is "Pending 03".
+  const sourceTexts = capturedTextMapFromOldSection // { textNodeName: characters }
+  const joinedText = Object.values(sourceTexts).join(" ").trim()
+
+  for (const [key] of textProps) {
+    try { newInstance.setProperties({ [key]: joinedText }) } catch (e) {}
+  }
+
+  // STEP B — VERIFY and force-override every TEXT descendant
+  // DS components often have one "primary" text node + decorative ones.
+  // The primary text node is the one whose characters look like a DS
+  // default ("This is a chip", "Button label", "Option 1", "Label", "Text",
+  // or any string that doesn't match the source). For each TEXT descendant,
+  // if its characters don't match our desired content, force-write.
+  const placeholder = /^(this is a chip|button label|option \d|label|text|placeholder)$/i
   const textNodes = newInstance.findAll((n) => n.type === "TEXT")
 
-  textNodes.forEach((node) => {
+  // Heuristic: if there's exactly one text node OR exactly one matches the
+  // placeholder pattern, write joinedText there. Otherwise, attempt a name-
+  // based mapping (when the DS text node name matches a source text name).
+  const placeholders = textNodes.filter((t) => placeholder.test((t.characters || "").trim()))
+  const targets = placeholders.length > 0 ? placeholders : textNodes.length === 1 ? textNodes : []
+
+  for (const t of targets) {
     try {
-      // Restore ONLY text content, not styling
-      // Let the DS component's text style define the typography
-      const oldText = textMap[node.name]
-      if (oldText) {
-        node.characters = oldText
+      if (typeof t.fontName === "object" && t.fontName !== figma.mixed) {
+        await figma.loadFontAsync(t.fontName)
       }
+      t.characters = joinedText
     } catch (err) {
-      console.warn(`Text content update failed for ${node.name}: ${err.message}`)
+      console.warn(`Text override failed for ${t.name}: ${err.message}`)
     }
-  })
+  }
+
+  // STEP C — assert. Re-read every text node and confirm none still match
+  // the placeholder pattern. If any do, the swap is incomplete.
+  const stillPlaceholder = newInstance.findAll(
+    (n) => n.type === "TEXT" && placeholder.test((n.characters || "").trim())
+  )
+  if (stillPlaceholder.length > 0) {
+    console.warn(`Swap left DS placeholders in ${newInstance.name}: ${stillPlaceholder.map(t => t.characters).join(", ")}`)
+  }
 })()
 ```
+
+**Multi-text components.** When the source has multiple text nodes (e.g. a list item with a primary label, secondary label, and time), map by source text node name to DS text-property name when the names line up. When they don't, use position order: source's first TEXT → DS's primary text property (`Text`, `Chip Text`, `Button text`); source's second → secondary (`Label`, `Info`, `Sub-text`). Always verify after.
 
 **3. Set icon override on button/icon components (the only hard override needed):**
 

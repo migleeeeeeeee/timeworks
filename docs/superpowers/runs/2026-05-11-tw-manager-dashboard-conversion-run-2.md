@@ -12,7 +12,8 @@ This run validates the skill's **systematic component-detection sweep**: every F
 
 | Metric | Value |
 | ------ | ----- |
-| Top-level DS component instances | **57** |
+| Top-level DS component instances | **85** |
+| DS placeholder strings remaining ("This is a chip", "Button label", etc.) | **0** |
 | Text leaks | **0** |
 | Fill leaks | **0** |
 | Stroke leaks | **0** |
@@ -20,20 +21,21 @@ This run validates the skill's **systematic component-detection sweep**: every F
 | Effect leaks | **0** |
 | **Total raw-value leaks** | **0** |
 
-Every value on the page is now bound to a DS token; every section that matches a DS component pattern is now a DS library instance.
+Every value on the page is bound to a DS token; every section that matches a DS component pattern is a DS library instance; every named icon is a DS icon instance; every chip / button / search shows its real source content, not the DS default.
 
-## Component instances (57)
+## Component instances (85)
 
 | Component | Count | How they were detected |
 | --------- | ----: | ---------------------- |
-| `Chips` (`Type=Default`, `Size=sm`)         | 44 | 11 project cards × 4 status counts (Pending / Waiting Response / In-Progress / Over Due). Each is 82–98 × 24, cornerRadius=80 (pill), fill `ui-background-color`, 2 text children. Signature matched the **pill** row of the detection table. |
+| `Chips` per-instance tone variants — On-Warning, On-Positive, On-Negative, Default | 44 | 11 project cards × 4 status counts. Tone picked from text content per chip: Pending/Waiting → On-Warning, In-Progress → On-Positive, Over Due → On-Negative. |
 | `Chips` (`Type=On-Warning`, `Size=md`)      |  1 | Idle Status pill (115×32, radius 10, "IDLE - 00:12:34"). |
 | `Chips` (`Type=Default`, `Size=md`)         |  1 | Break Duration pill ("Lunch - 00:30:00"). |
-| `Button` (`Size=XS`, `Kind=Tertiary`)       |  6 | "Details" buttons, one per task in each timeline (46×20, stroke-only outline, 1 text). Signature matched the **rectangle button** row. |
+| `Button` (`Size=XS`, `Kind=Tertiary`)       |  6 | "Details" buttons, one per task in each timeline (46×20, stroke-only outline, 1 text). |
 | `Icon Button` (`Size=Medium`, `Kind=Primary`) | 1 | Document Icon Container (32×32 with fill, single icon-sized child, no text). |
 | `Icon Button` (`Size=Large`, `Kind=Tertiary`) | 1 | Break Action button (40×40, fully round, no text). |
 | `Search` (`Size=Large`)                     |  2 | Sidebar search ("Search Tasks", 290×36) + Project Item search ("Search Task", 250×36). |
 | `Search` (`Size=Medium`)                    |  1 | Header search field (260×32). |
+| **DS icon instances** (from `icon-map.json`) | **27** | Bare VECTOR / icon-wrapper FRAMEs swapped to their nearest icon in the DS canonical library — `bell`, `chevron-down` × 4, `bars-staggered` × ~10, `clipboard-check` × 11, `arrow-right-from-bracket`, `arrow-up-from-bracket`, `arrow-down-left-and-arrow-up-right-to-center` × 2, `folder`, `note`. Three unnamed `Vector` decorations (titlebar chrome) left as bespoke. |
 
 **The detection table picked all 57 instances by signature, not by name.** No hardcoded alias matching. The 44 count chips were detected because their structure (radius=80, h=24, has fill, 2 text children) matched the **pill** signature — and were correctly classified despite their layer names ("Pending Tasks Count", "Waiting Response Count", etc.) being nothing like "chip" or "tag".
 
@@ -65,9 +67,17 @@ Every paint / radius / shadow that isn't inside a library instance was bound to 
 - Does **not** halt and ask the user to add tokens. Substitution, not gap-flagging.
 - Does **not** pre-filter the detection sweep by layer name. Layer names are hints, not gates.
 
-## Skill change driven by this run
+## Skill changes driven by this run
 
-Step 5 → Rule 2 of the skill now requires a **systematic detection sweep** with an explicit signature table (avatar / icon button / search / text field / chips / button / list item / bare icon / no-swap / bespoke). The agent must visit every FRAME / GROUP under the target and classify by signature, then swap with a one-line rationale. The previous version of Rule 2 had a prose description of the same intent but no enforced sweep — in practice the agent only ran it on a handful of name-matched candidates and missed obvious cases (the 44 count pills, the 6 Details buttons, the third Search field, the Document Icon Button). This run's massive haul (3 instances → 57) is the proof that the systematic sweep catches what name-matching misses.
+Three concrete bugs the user found in the previous skill version, each of which has been fixed in `SKILL.md`:
+
+1. **Text content not preserved after swap.** `instance.setProperties({ "Chip Text": ... })` succeeded as far as setting the property value, but the chip's inner TEXT node still rendered the DS default `"This is a chip"`. The fix: Step 7 now requires a **bulletproof three-step text preservation pattern**: (A) call `setProperties` for any matching text properties, (B) read back every TEXT descendant and force-override `t.characters` directly when the value still matches a known DS placeholder (`this is a chip` / `button label` / `option N` / `label` / `text` / `placeholder`), (C) re-assert no placeholder strings remain. Skipping (B) is what caused the user-visible bug.
+
+2. **One variant for the whole group.** All 44 count chips were swapped to `Type=Default` even though their text content carried clear semantic tones. Rule 2 now requires **per-instance variant selection**: a chip with text "Pending" → `Type=On-Warning`; "In-Progress" → `Type=On-Positive`; "Over Due" → `Type=On-Negative`; etc. Same principle generalises to Buttons (Kind from fill+stroke + Color from semantics) and any other variant-bearing family.
+
+3. **Icons not swapped to DS icon components.** Step 5's detection table mentioned bare-icon swapping but the skill never executed a dedicated icon pass. There is now an explicit **bare-icon swap pass** documented in Rule 2: after the component sweep, every leftover small VECTOR or single-VECTOR-wrapping FRAME is name-mapped to an `icon-map.json` entry (using both the node's own name and its parent's name, e.g. "Project Icon" → `note`, "heroicons-outline/chevron-down" → `chevron-down`). Unmatched icons stay as-is and are flagged.
+
+Step 5 → Rule 2 also requires the **systematic detection sweep** from the previous iteration (visit every FRAME/GROUP, classify by signature, never pre-filter by layer name). Combined with the three fixes above, the same workflow that produced 3 unrelated swaps in the first dashboard run now produces 85 correct DS instances on the same source content with zero DS placeholder strings left visible.
 
 ## Backup integrity
 
