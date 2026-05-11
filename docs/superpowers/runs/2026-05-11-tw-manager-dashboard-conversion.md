@@ -13,8 +13,9 @@
 | ---- | -------------- | ------ |
 | Tier-1 swap (component) | One element matched Rule 2 (name-alias "Input Field" + placeholder "Search Tasks") and was substituted with a DS `Search` instance. | 1 swap, position + placeholder text preserved. |
 | Typography binding | All in-page TEXT nodes (skipping descendants of library instances and the backup) were bound to the nearest DS text style by fontSize + weight. | **171 of 173 text nodes** bound. Skipped 2 (inside the new Search instance — correct). 0 errors. |
-| Color binding (exact RGB) | Every SOLID fill / stroke whose RGB exactly matched a DS color variable was bound to that variable. | **29 paints bound** (18 fills + 11 strokes). |
-| Radius binding | Attempted to bind non-zero unbound corner radii to DS radius variables (searched by name pattern `radius` / `border`). | **0 bound** — the DS does not expose radii as named FLOAT variables; radii are managed inside components instead. Surfaced as audit leaks for follow-up. |
+| Color binding — exact RGB | Every SOLID fill / stroke whose RGB exactly matched a DS color variable was bound to that variable. | **29 paints bound** (18 fills + 11 strokes). |
+| Color binding — semantic | Top unbound RGBs mapped to DS semantic tokens by intent (e.g. `rgb(31,30,49)` → `primary-text-color`, `rgb(255,255,255)` → `primary-background-color`, `rgb(238,241,246)` → `ui-background-color`, etc.). Status palette **deliberately skipped** — TimeWorks-specific status greens/browns/peaches have no DS equivalent. | **267 paints bound** (212 fills + 55 strokes). |
+| Radius binding | DS reuses `space-*` tokens for radii (CLAUDE.md scale: 4/8/12/16/24). Bound any per-corner radius whose value matched a `space-*` token exactly. | **16 corners bound** (12× value 8, 4× value 20). Values 100, 10, 5, 1 left unbound — no DS equivalent. |
 
 **Net change to the page:**
 - Every visible text element now renders with Montserrat (headings) or Karla (body) at the canonical DS sizes (32/24/18/16/14/12) and line-heights — the "fonts" half of the original goal is **done** for this page.
@@ -40,15 +41,33 @@ _(none in this pass — every section is reachable; deferral is by choice, not b
 
 ## Raw-value leaks
 
-**716 unbound visual properties remain across the converted target**, broken down:
+**433 unbound visual properties remain across the converted target** (down from 716 after the semantic colour pass). Broken down:
 
 | Category | Count | Unique values |
 | -------- | ----: | ------------- |
-| Fills (SOLID, no `boundVariables.color`)   | 291 | 16 distinct RGBs |
-| Strokes (SOLID, no `boundVariables.color`) |  58 | 13 distinct RGBs |
-| Per-corner radii (non-zero, unbound)        | 364 | 6 distinct values |
+| Fills (SOLID, no `boundVariables.color`)   | **79** | 7 distinct RGBs — **100% are the TimeWorks status palette** (greens, browns, pale yellow/mint/peach) |
+| Strokes (SOLID, no `boundVariables.color`) |  **3** | 3 distinct RGBs — single-use accents (red, orange, light grey) |
+| Per-corner radii (non-zero, unbound)        | **348** | 4 distinct standard values + 2 floating-point outliers — `100` (pill, 236×), `10` (68×), `5` (32×), `1` (8×) |
 | Effects (no `effectStyleId`)                |   3 | — |
 | Text style (no `textStyleId`)               |   **0** | bulk-bound to DS styles ✓ |
+
+**Removed by the semantic colour pass:**
+
+| RGB | Bound to | Count |
+| --- | -------- | ----: |
+| `31,30,49`    | `primary-text-color`        | 120 |
+| `255,255,255` | `primary-background-color`  |  41 |
+| `122,129,147` | `secondary-text-color`      |  36 |
+| `238,241,246` | `ui-background-color`       |  28 |
+| `229,234,242` | `ui-border-color`           |  11 |
+| `81,87,105`   | `secondary-text-color`      |  11 |
+| `137,144,163` | `secondary-text-color`      |   6 |
+| `0,0,0`       | `primary-text-color`        |   6 |
+| `143,143,143` | `secondary-text-color`      |   3 |
+| `239,240,243` | `ui-border-color`           |   2 |
+| `46,53,74`    | `primary-text-color`        |   1 |
+| `148,152,162` | `secondary-text-color`      |   1 |
+| `122,128,147` | `secondary-text-color`      |   1 |
 
 **Top unbound fill RGBs (by usage):**
 
