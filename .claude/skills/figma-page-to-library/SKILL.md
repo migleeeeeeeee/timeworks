@@ -461,6 +461,121 @@ After **the full pass**:
 - `figma_take_screenshot` of the full target.
 - `figma_set_annotations` on each section with its bucket: `🔄 swapped`, `🔄 composed`, `✓ already-connected`, or `❌ blocked: <reason>`.
 
+### 9.5. Audit for raw values
+
+One read-only `figma_execute` walk over the converted target frame. **Non-blocking** — surfaces leaks in the report; never halts the run.
+
+**A leak is** any of, inside a Tier-1 (`exact-swap`) or Tier-2 (`compose-from-primitives`) section, recursively:
+
+- A `SolidPaint` fill or stroke whose `boundVariables.color` is undefined.
+- A `cornerRadius` — or any of `topLeftRadius`, `topRightRadius`, `bottomLeftRadius`, `bottomRightRadius` — that is not bound to a variable and is not `0`.
+- A `TextNode` whose `textStyleId` is empty AND whose `fontName`, `fontSize`, and `lineHeight` are not all bound to variables. All-or-nothing on text bindings.
+- An `effects` entry on a node with empty `effectStyleId`.
+
+**Not leaks:**
+
+- Anything inside a Tier-3 (`annotate-and-preserve`) or Tier-4 (`blocked`) section.
+- Image fills and gradient fills.
+- Nodes whose name (case-insensitive substring) matches the allowlist `["Toast", "Slider", "Modal"]` — these carry intentional `rgba(...)` overlays per CLAUDE.md.
+- Descendants of newly-placed library instances — their styling resolves through the library's own bindings.
+
+**Walker pattern** (chunked at ≤200 nodes per call; cursor pattern for large frames):
+
+```javascript
+;(async () => {
+  const ALLOWLIST = ["toast", "slider", "modal"]
+  const TIER_OK = new Set(tier12SectionIds) // ids of sections classified as Tier 1 or Tier 2 in Step 6
+  const skipUnderInstance = (node) => {
+    let p = node.parent
+    while (p) {
+      if (p.type === "INSTANCE" && p.mainComponent?.remote) return true
+      p = p.parent
+    }
+    return false
+  }
+  const isAllowlisted = (node) => {
+    let p = node
+    while (p) {
+      if (ALLOWLIST.some((name) => p.name?.toLowerCase().includes(name))) return true
+      p = p.parent
+    }
+    return false
+  }
+  const isBound = (boundVariables, key) => Boolean(boundVariables?.[key])
+
+  const leaks = []
+  const visit = (node) => {
+    if (!node || skipUnderInstance(node) || isAllowlisted(node)) return
+    // Fills
+    if (Array.isArray(node.fills)) {
+      for (const paint of node.fills) {
+        if (paint.type === "SOLID" && !isBound(paint.boundVariables, "color")) {
+          leaks.push({
+            nodeId: node.id,
+            nodeName: node.name,
+            property: "fill",
+            rawValue: paint.color
+          })
+        }
+      }
+    }
+    // Strokes
+    if (Array.isArray(node.strokes)) {
+      for (const paint of node.strokes) {
+        if (paint.type === "SOLID" && !isBound(paint.boundVariables, "color")) {
+          leaks.push({
+            nodeId: node.id,
+            nodeName: node.name,
+            property: "stroke",
+            rawValue: paint.color
+          })
+        }
+      }
+    }
+    // Radii (per corner)
+    const radiusKeys = ["topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius"]
+    for (const k of radiusKeys) {
+      const v = node[k]
+      if (typeof v === "number" && v !== 0 && !isBound(node.boundVariables, k)) {
+        leaks.push({ nodeId: node.id, nodeName: node.name, property: k, rawValue: v })
+      }
+    }
+    // Text — all-or-nothing on bindings
+    if (node.type === "TEXT" && !node.textStyleId) {
+      const bv = node.boundVariables ?? {}
+      if (!bv.fontFamily || !bv.fontSize || !bv.lineHeight) {
+        leaks.push({
+          nodeId: node.id,
+          nodeName: node.name,
+          property: "text",
+          rawValue: `${node.fontSize}/${node.lineHeight?.value ?? node.lineHeight}`
+        })
+      }
+    }
+    // Effects
+    if (Array.isArray(node.effects) && node.effects.length > 0 && !node.effectStyleId) {
+      leaks.push({
+        nodeId: node.id,
+        nodeName: node.name,
+        property: "effect",
+        rawValue: node.effects.length
+      })
+    }
+    if ("children" in node) {
+      for (const c of node.children) visit(c)
+    }
+  }
+
+  for (const sectionId of TIER_OK) {
+    const root = await figma.getNodeByIdAsync(sectionId)
+    if (root) visit(root)
+  }
+  return { leaks }
+})()
+```
+
+The returned `leaks` array feeds Step 10's report. The audit never throws; if the walker errors, surface the error in the report under `## Raw-value leaks` as `⚠️ audit failed: <message>` and continue.
+
 ### 10. Deliverable
 
 Write a markdown report at:
