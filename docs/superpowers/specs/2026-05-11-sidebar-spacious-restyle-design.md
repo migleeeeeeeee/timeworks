@@ -8,7 +8,7 @@
 
 Restyle the existing `Sidebar` component to feel spacious and deliberate — borrowing the typographic rhythm, sectioned grouping, and expandable groups from the Hyde casino reference — while staying entirely within the existing TimeWorks token system.
 
-This is a **restyle in place** (Approach A). Defaults change; every consumer of `Sidebar` will visually shift. The current Sidebar lives in the DS Figma library at node `25694:158051` and is exported from `src/components/Sidebar/`.
+This is a **restyle in place** (Approach A). Defaults change; every consumer of `Sidebar` will visually shift. The current Sidebar lives in the working DS Figma file (`gqYWCu1K6dJ9gESXtgNeCi` — "TimeWorks Design System (Experiment)") on the **Sidebar** page (`25685:133449`); the existing component set for rows is `Sidebar Item` (`25694:157418`). No code component exists yet under `src/components/Sidebar/`.
 
 ## Non-goals
 
@@ -142,7 +142,7 @@ This spec is the **design contract**. Execution is two phases:
 
 ### Phase 1 — Figma (authoritative)
 
-Run the `figma-design` skill against the DS library file `04x9q7W2Y59baF5MqHAVZR`, on the Sidebar component page (component node `25694:158051`, related Sidebar Icon Button `25694:157615`). The skill must produce the standard four-frame contract for the restyled Sidebar:
+Run the `figma-design` skill against the working DS file `gqYWCu1K6dJ9gESXtgNeCi` ("TimeWorks Design System (Experiment)"), on the **Sidebar** page (`25685:133449`). The existing `Sidebar Item` component set is `25694:157418`; the skill should produce a new component set for the restyled row + group-row + section-title primitives, and a parent `Sidebar` component-set that composes them. The skill must produce the standard four-frame contract for the restyled Sidebar:
 
 - **Anatomy** — annotated structure (panel, header, sections, section title, link row, group row, group children, footer; Radix primitive notes on group rows).
 - **Variants** — flat (sections only) and grouped (with one expandable group, open + closed).
@@ -151,7 +151,7 @@ Run the `figma-design` skill against the DS library file `04x9q7W2Y59baF5MqHAVZR
 
 Every fill, stroke, radius, and spacing in the new design must bind to a Figma variable. The component-set in Figma must include variant props matching the code API (`kind`, `state`, `open`).
 
-**Caveat:** the figma-console MCP is currently connected to the Experiment file (`gqYWCu1K6dJ9gESXtgNeCi`), not the DS library file (`04x9q7W2Y59baF5MqHAVZR`). Before authoring, switch the active Figma Desktop file to the DS library so component edits land in the published source — or, if intentionally exploring in the Experiment file first, copy results back to the DS library before code generation.
+**File policy:** the Experiment file (`gqYWCu1K6dJ9gESXtgNeCi`) is the working DS file going forward (decision 2026-05-11). All Figma authoring lands here.
 
 ### Phase 2 — Code (after Figma sign-off)
 

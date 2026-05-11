@@ -4,7 +4,7 @@
 
 **Goal:** Restyle the Figma `Sidebar` component to a spacious, sectioned, expandable-group pattern (Hyde-inspired), then generate the React + Storybook + test implementation in this repo.
 
-**Architecture:** Figma is authoritative. Phase 1 rebuilds the Sidebar component-set in the DS Figma library (`04x9q7W2Y59baF5MqHAVZR`) using the `figma-design` skill, producing the four-frame contract (Anatomy, Variants, States, Tokens). Phase 2 generates `src/components/Sidebar/*` from that Figma source using the `figma-to-code` skill. All visual values resolve to existing TimeWorks tokens via Tailwind utilities; behavior for the expandable group is delegated to Radix `Accordion`.
+**Architecture:** Figma is authoritative. Phase 1 rebuilds the Sidebar component-set in the working DS file `gqYWCu1K6dJ9gESXtgNeCi` ("TimeWorks Design System (Experiment)") using the `figma-design` skill, producing the four-frame contract (Anatomy, Variants, States, Tokens) on the existing **Sidebar** page (`25685:133449`). Phase 2 generates `src/components/Sidebar/*` from that Figma source using the `figma-to-code` skill. All visual values resolve to existing TimeWorks tokens via Tailwind utilities; behavior for the expandable group is delegated to Radix `Accordion`.
 
 **Tech Stack:** Figma + figma-console MCP (Plugin API), Tokens Studio (only if a needed token is missing), React 18 + TypeScript (strict), Tailwind v4 with CSS variable theming, Radix UI Accordion, cva, Storybook 8, Vitest (test runner pending — see Open work in CLAUDE.md).
 
@@ -29,7 +29,7 @@
 
 **Figma (Phase 1):**
 
-- DS library file `04x9q7W2Y59baF5MqHAVZR`, current Sidebar component node `25694:158051`, Sidebar Icon Button `25694:157615`. The figma-design skill will rebuild the component-set on the existing component page with the new contract.
+- Working DS file `gqYWCu1K6dJ9gESXtgNeCi` ("TimeWorks Design System (Experiment)"). Sidebar page `25685:133449`. Existing `Sidebar Item` component set: `25694:157418`. The figma-design skill will produce new primitives (link row, group row, section title) and a parent `Sidebar` component set on this page following the four-frame contract.
 
 ---
 
@@ -43,38 +43,27 @@
 
 Call `mcp__figma-console__figma_get_status` with `probe: true`.
 
-Expected: `setup.valid: true`, `transport.active: "websocket"`, and `transport.websocket.connectedFile.fileKey` equals `04x9q7W2Y59baF5MqHAVZR` ("TimeWorks Design System (presented)").
+Expected: `setup.valid: true`, `transport.active: "websocket"`, and `transport.websocket.connectedFile.fileKey` equals `gqYWCu1K6dJ9gESXtgNeCi` ("TimeWorks Design System (Experiment)" — the working DS file as of 2026-05-11).
 
-If `connectedFile.fileKey` is anything else (e.g. `gqYWCu1K6dJ9gESXtgNeCi` — the Experiment file), **STOP** and ask the user to switch the active Figma Desktop file to the DS library. Do not author into the wrong file.
+If `connectedFile.fileKey` is anything else, **STOP** and ask the user to switch the active Figma Desktop file to the Experiment file. Do not author into a different file.
 
-- [ ] **Step 2: Confirm the existing Sidebar nodes resolve**
+- [ ] **Step 2: Confirm the Sidebar page and existing component set resolve**
 
 Call `mcp__figma-console__figma_execute` with the body:
 
 ```javascript
-const sidebar = await figma.getNodeByIdAsync("25694:158051");
-const iconBtn = await figma.getNodeByIdAsync("25694:157615");
+await figma.loadAllPagesAsync();
+const page = await figma.getNodeByIdAsync("25685:133449");
+const sidebarItem = await figma.getNodeByIdAsync("25694:157418");
 return {
-  sidebar: sidebar ? { name: sidebar.name, type: sidebar.type } : null,
-  iconBtn: iconBtn ? { name: iconBtn.name, type: iconBtn.type } : null,
+  page: page ? { id: page.id, name: page.name, type: page.type } : null,
+  sidebarItem: sidebarItem ? { id: sidebarItem.id, name: sidebarItem.name, type: sidebarItem.type } : null,
 };
 ```
 
-Expected: both nodes resolved, types are `COMPONENT` or `COMPONENT_SET`.
+Expected: `page.name === "Sidebar"`, `sidebarItem.name === "Sidebar Item"` and type `COMPONENT_SET`.
 
-If either is null, surface to the user; node IDs may have moved.
-
-- [ ] **Step 3: Locate (or create) the Sidebar component page**
-
-Call `mcp__figma-console__figma_execute`:
-
-```javascript
-await figma.loadAllPagesAsync();
-const page = figma.root.children.find(p => p.name.includes("Sidebar"));
-return page ? { id: page.id, name: page.name } : null;
-```
-
-Note the page id (or `null`). If `null`, the `figma-design` skill in Task 2 will create the page; if it exists, the skill will replace its four contract frames.
+If either is null, surface to the user — node IDs may have moved in the Experiment file.
 
 ### Task 2: Author the Sidebar component-set in Figma
 
@@ -82,7 +71,7 @@ Note the page id (or `null`). If `null`, the `figma-design` skill in Task 2 will
 
 - [ ] **Step 1: Invoke the figma-design skill**
 
-Invoke `Skill` with `skill: "figma-design"` and pass the spec path `docs/superpowers/specs/2026-05-11-sidebar-spacious-restyle-design.md` plus the explicit scope: "Rebuild the Sidebar component-set per this spec. Produce the four-frame contract on the Sidebar component page: Anatomy, Variants, States, Tokens. Every fill/stroke/radius/spacing must bind to a Figma variable. Variant props on the component-set: `kind` (link | group | section-title), `state` (default | hover | active | focus-visible | disabled), `open` (true | false, only meaningful for kind=group)."
+Invoke `Skill` with `skill: "figma-design"` and pass the spec path `docs/superpowers/specs/2026-05-11-sidebar-spacious-restyle-design.md` plus the explicit scope: "Rebuild the Sidebar component-set per this spec on the existing **Sidebar** page (`25685:133449`) in the active file (`gqYWCu1K6dJ9gESXtgNeCi`). Produce the four-frame contract: Anatomy, Variants, States, Tokens. Every fill/stroke/radius/spacing must bind to a Figma variable. Variant props on the row component-set: `kind` (link | group | section-title), `state` (default | hover | active | focus-visible | disabled), `open` (true | false, only meaningful for kind=group). Leave the existing `Sidebar Item` component-set (`25694:157418`) in place as reference; do not delete it until the new set is signed off."
 
 Follow the skill's flow end-to-end. It owns its own halt-on-missing-token logic per CLAUDE.md "Tokens" rules.
 
