@@ -176,20 +176,56 @@ Each entry points at one specific COMPONENT (the "default" variant for variant-b
 
 `figma_search_components` is similarly forbidden as a discovery path. The map is the only source.
 
-For each section in the inventory, decide:
+For each section in the inventory, run the **four-rule matcher cascade**. The first rule that matches wins.
 
-- which map entry (by name) is the right family
-- what variant properties to apply via `setProperties` after instantiation
-- one-to-one swap vs composition
-- text/instance property keys needed for overrides
+#### Rule 1 — Existing key match
 
-**Variant matching — never default blindly.** Before choosing variant properties, inspect the source section for:
+If the source section is already an `INSTANCE` and its `mainComponent.key` exists as a value in `component-map.json`, treat it as `exact-swap`. Preserve `instance.componentProperties` and carry variants over via `setProperties` after re-instantiating from the map (or, if the section is already in the same family, `swapComponent` to the canonical map entry to repoint at the Experiment-file source).
 
-- semantic cues from name, copy, usage
-- visual cues — fills, strokes, effects, radius, typography
-- existing variant-like traits in the screen (primary vs secondary buttons, etc.)
+#### Rule 2 — Name alias match
 
-If the family is right but the variant is ambiguous, call it out instead of silently using the default. The Figma component pages (Accordion, Button, etc.) document each component's available variant properties; consult them when a section's intent isn't obvious.
+Lowercase the source node name, strip punctuation, and look up against this alias table baked into the skill:
+
+| Source alias (lowercased)                             | DS component (from `component-map.json`) |
+| ----------------------------------------------------- | ---------------------------------------- |
+| `btn`, `button`, `cta`, `action`, `primary`, `secondary` | `Button`                                 |
+| `icon button`, `iconbutton`, `icon btn`               | `Icon Button`                            |
+| `tag`, `chip`, `pill`, `badge`                        | `Tag` (use `Badge` only if Tag absent)   |
+| `avatar`, `profile pic`, `user pic`                   | `Avatar`                                 |
+| `banner`, `alert`, `notice`                           | `Alert Banner`                           |
+| `input`, `text field`, `textfield`                    | `Input`                                  |
+| `checkbox`                                            | `Checkbox`                               |
+| `radio`                                               | `Radio Group`                            |
+| `switch`, `toggle`                                    | `Switch`                                 |
+| `dropdown`, `select`                                  | `Dropdown`                               |
+| `modal`, `dialog`                                     | `Modal`                                  |
+| `tooltip`                                             | `Tooltip`                                |
+| `sidebar`, `side nav`, `navigation rail`              | `Sidebar`                                |
+
+On hit, instantiate the mapped component and infer variant from visual cues — primary/secondary from fill role; outlined from stroke presence; with-icon from any nested `INSTANCE` whose name matches an `icon-map.json` entry; size from height bucket (`<32` → sm, `32–40` → md, `>40` → lg). Apply via `setProperties`.
+
+#### Rule 3 — Visual signature match (composition)
+
+Compute a small signature for the section:
+
+```js
+{
+  radiusBucket: "none" | "sm" | "md" | "lg" | "full",   // cornerRadius bucketed: 0, ≤4, ≤8, ≤16, full
+  hasStroke: boolean,                                    // any visible stroke
+  hasIcon: boolean,                                      // any child INSTANCE whose name is in icon-map.json
+  hasAvatar: boolean,                                    // any child INSTANCE whose name matches /avatar|profile/i
+  childCount: number,
+  role: "container" | "control" | "text"                 // container if has 2+ visible children; text if all children are TEXT; else control
+}
+```
+
+If at least two DS primitives' signatures match the section's children (e.g. an Avatar child and a Text child → compose Avatar + Text + optional Button), route to `compose-from-primitives` (Tier 2 in Step 8).
+
+#### Rule 4 — Fall through
+
+If none of Rules 1–3 fire, fall through to Tier 3 in Step 8 (`annotate-and-preserve`).
+
+**Variant matching — never default blindly.** When Rule 1 or Rule 2 yields a family but the variant is still ambiguous, call it out in the report rather than silently choosing the component's default. The Experiment file's component pages document each component's available variant properties; consult them when intent is unclear.
 
 ### 6. Decide section strategy (per section)
 
