@@ -366,31 +366,42 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 
 **3. Set icon override on button/icon components (the only hard override needed):**
 
+Load `icon-map.json` at the start of the run alongside `component-map.json`. For each Tier-1 swap whose target has an `INSTANCE_SWAP` property containing "icon", resolve the icon by name through `icon-map.json` — by id when running in the DS file, by key when running cross-file. If the name isn't in the map, log a warning and leave the DS component's default icon in place. **Never** fall back to `figma.root.findOne` — it will time out.
+
 ```javascript
 ;(async () => {
   try {
     const props = newInstance.componentProperties
-    // Find icon property (e.g., 'Icon', 'LeftIcon', 'StartIcon', etc.)
     const iconPropKey = Object.keys(props ?? {}).find(
       (k) => k.toLowerCase().includes("icon") && props[k].type === "INSTANCE_SWAP"
     )
-
     if (!iconPropKey || !instanceHints) return
 
-    // Extract icon name from old component (e.g., "Icons/ChevronDown")
+    // Extract icon name from the captured hint (e.g., "Icons/ChevronDown" → "ChevronDown").
     const oldIconName = instanceHints[iconPropKey] ?? ""
-    const iconNameHint = oldIconName.split("/").pop() // "ChevronDown"
+    const iconNameHint = oldIconName.split("/").pop()
+    if (!iconNameHint) return
 
-    if (!iconNameHint) return // No icon hint to work with
-
-    // Icons are not in component-map.json today. If the source instance
-    // already exposes a usable icon node id via instanceHints, set it
-    // directly; otherwise leave the DS default and flag in the report.
-    const oldIconId = instanceHints[`${iconPropKey}__id`]
-    if (oldIconId) {
-      newInstance.setProperties({ [iconPropKey]: oldIconId })
+    // Resolve via icon-map.json (loaded at the start of the run alongside component-map.json).
+    // Same-file (work-in-DS-file mode): use the id.
+    // Cross-file (source-file mode): import by key.
+    const entry = iconMap[iconNameHint]
+    if (!entry) {
+      console.warn(`Icon "${iconNameHint}" not in icon-map.json; leaving DS default`)
+      return
     }
-    // Do NOT fall back to figma.root.findOne — it will time out on the DS file.
+
+    let iconNodeId
+    if (figma.fileKey === dsFileKey) {
+      const node = await figma.getNodeByIdAsync(entry.id)
+      iconNodeId = node?.id
+    } else {
+      const imported = await figma.importComponentByKeyAsync(entry.key)
+      iconNodeId = imported?.id
+    }
+    if (iconNodeId) {
+      newInstance.setProperties({ [iconPropKey]: iconNodeId })
+    }
   } catch (err) {
     console.warn(`Icon override failed: ${err.message}`)
   }
