@@ -196,42 +196,50 @@ Before classifying, gather:
 
 If the section is itself an `INSTANCE` and its `mainComponent.key` exists in `component-map.json`, treat as `exact-swap`. Preserve overrides via `setProperties` after re-instantiating from the map (or `swapComponent` to repoint at the canonical Experiment-file source).
 
-#### Rule 2 — Semantic match (judgment)
+#### Rule 2 — Semantic match by **systematic detection sweep** (judgment)
 
-Using the context from Step A, pick the **closest** DS component from `component-map.json` by reasoning about intent. The match doesn't need a literal name overlap — it needs a semantic fit.
+The skill **must visit every FRAME / GROUP** under the target frame and classify by **what the node looks like**, not by what its layer name says. Layer names are hints, not gates — real product files use semantic names (`Second Task Details Container`, `Play Icon Container`, `Project and Task Container`) that don't word-match any fixed alias table but are unambiguous patterns when you look at their shape and children. **Do not pre-filter the sweep by name.** Visit every container, compute a signature, evaluate the detection table.
 
-**Write a one-line rationale** before swapping, so the report can show the reasoning:
+For each non-INSTANCE FRAME / GROUP, compute:
+
+```js
+{
+  w, h, aspect: w/h,
+  radius: max corner radius,
+  hasFill, hasStroke,
+  textChildren: count of direct or near-direct TEXT descendants (capture characters, fontSize),
+  iconChildren: count of children that are ≤24×24 and either VECTOR, INSTANCE matching icon-map.json, or FRAME wrapping a single VECTOR,
+  avatarChildren: count of circular ≥24×24 children with image fill or single-letter text,
+  instanceChildren: count of existing INSTANCE descendants,
+}
+```
+
+Evaluate the **detection table** top-to-bottom. First match wins:
+
+| Signature | DS pick | Variant inference |
+| --------- | ------- | ----------------- |
+| **Circle** (radius ≥ min(w,h)/2 − 2), no text or single-letter text, image fill or initial | `Avatar` | Size by w (24/32/40/48) |
+| **Square** (aspect ≈ 1), h ∈ [24, 56], 0 text, ≥1 icon child, has fill or stroke | `Icon Button` | Size by h: ≤24→XXS, ≤32→Small, ≤40→Medium, ≤48→Large; Kind: solid fill→Primary, stroke only→Tertiary |
+| **Wide input shape**: w ≥ 150, h ∈ [28, 48], 1 text + 1 left-icon, text reads like a search placeholder ("Search…", "Find…") | `Search` | Size by h: ≤32→Medium, >32→Large |
+| **Wide input shape**: w ≥ 150, h ∈ [28, 48], 1 text, stroke present, text reads like placeholder/value; with a chevron-down icon child → `Combobox`; otherwise → `Text Field` | `Text Field` / `Combobox` | Size by h |
+| **Pill** (radius ≥ h/2 − 1, OR radius = 100), h ∈ [16, 36], 1–3 text children | `Chips` | Tone from content: "IDLE"/"Pending"→On-Warning; "Done"/"Completed"/"Working"→On-Positive; "Error"/"Failed"→On-Negative; "Lunch"/"Break"/neutral→Default. Size: h≤24→sm, ≤32→md, >32→lg. With-icon / with-avatar by child presence. |
+| **Rectangle button**: 1 text child, 0–1 icon child, h ∈ [20, 48], radius < h/2 (not a pill), has fill OR stroke | `Button` | Size by h: ≤24→XS, ≤32→Small, ≤40→Medium, ≤48→Large. Kind: solid fill + dark color→Primary; light fill + stroke→Secondary; stroke only, no fill→Tertiary. Icon position: Left if icon precedes text, Right if follows. |
+| **Row** with avatar + text + optional time/meta + optional trailing control | `List item` | Avatar=Yes if avatar child present; Right icon=Yes if trailing icon |
+| **Bare icon** (standalone VECTOR or FRAME-wrapping-single-VECTOR ≤24×24) NOT inside a button/icon-button signature | swap the VECTOR for an `icon-map.json` entry by best-match (parent-name hint, then size match) — instantiate the icon component | n/a (icon components are size-fixed) |
+| **Just text + thin shapes**, no fill/stroke, no clear affordance | _no swap_ — Rule 4 token-binding only | n/a |
+| **Bespoke graphic** (multiple VECTORs, no clear semantic) | Rule 5 annotate-and-preserve | n/a |
+
+**Always write a one-line rationale** before swapping so the report shows reasoning:
 
 ```
 <Source path>  →  <DS component>  (variant: <variant>)  — because <one-line reason>
 ```
 
-Example rationales drawn from a real TimeWorks page (use as a learning reference, not a fixed table):
+**Icon swap inside detected components.** When the detected component has an icon slot (Button with `Icon=Left/Right`, Icon Button's icon child, Search's left icon, Combobox's chevron), try to map the source icon's name (or its parent's name — e.g. "Play Icon Container" → `circle-play`) to an `icon-map.json` entry. If no clear match, leave the DS default and flag `⚠️ icon unspecified`.
 
-| Source layer (path) | Children / content | DS pick | Rationale |
-| ------------------- | ------------------ | ------- | --------- |
-| `Idle Status` (40×24 pill) | text "IDLE" + separator + duration | `Badge` (variant: warning/idle) | Small pill with status label + duration → status indicator. |
-| `Break Label` group | text "Lunch" + "-" + "00:30:00" | `Badge` (variant: info) | Same shape as Idle Status; label + duration. |
-| `Task Title` | text "Drafting Proposals" only | _no swap_ — Text-style only | Single text node; typography binding is sufficient. |
-| `Project Header` (94×24) | text "Projects" | _no swap_ — Text-style only | Section heading; one TEXT child. |
-| `Task Timer Container` (310×150) | Title + status pill + time readouts | `compose-from-primitives`: Text + Badge | No single component fits a multi-line timer header. |
-| `Project Task Title` row | name + "|" + time + "|" + short title | `compose-from-primitives`: `List item` | Repeated row → DS List item with overrides. |
-| `Input Field` | placeholder "Search Tasks" | `Search` (variant: Large/Default) | Magnifying-glass + placeholder → Search field. |
-| `"Details" labels` | text "Details", 10px, clickable look | `Link` (or Text styled as link) | Repeated affordance to expand a row. |
-| `Bottom Bar` (1400×44) | mixed status bar | Tier-3 `annotate-and-preserve` | App chrome with no DS analogue. |
+**Sweep ordering.** Process detected components **outermost-first**. Once a node is replaced by an instance, do NOT also try to match its descendants (the new instance owns them). Skip any node that lives under a replaced ancestor.
 
-Variant inference — from visual cues, in order:
-
-- **Size variant** from height bucket: `<28` → `xs/sm`, `28–36` → `md` (DS default), `>36` → `lg`.
-- **Tone variant** from text content + fill color:
-  - "IDLE" / "Pending" / yellow fill → `warning`
-  - "Working" / green fill / "Completed" → `positive`
-  - "Error" / "Failed" / red fill → `negative`
-  - "Lunch" / "Break" / neutral fill → `info` or `neutral`
-- **Outlined vs filled** from stroke presence.
-- **With-icon** if a nested INSTANCE name appears in `icon-map.json`.
-
-If the family is right but variant is genuinely ambiguous, instantiate the default and flag in the report with `⚠️ variant ambiguous` — do not silently pick.
+**Variant ambiguity.** If the family is right but variant is genuinely ambiguous after applying the inference rules, instantiate the default and flag `⚠️ variant ambiguous` — do not silently pick.
 
 #### Rule 3 — Compose from primitives (when no single component fits)
 
