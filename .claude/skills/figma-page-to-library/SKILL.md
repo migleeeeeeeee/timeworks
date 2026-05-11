@@ -176,56 +176,102 @@ Each entry points at one specific COMPONENT (the "default" variant for variant-b
 
 `figma_search_components` is similarly forbidden as a discovery path. The map is the only source.
 
-For each section in the inventory, run the **four-rule matcher cascade**. The first rule that matches wins.
+For each section in the inventory, the agent reasons through the **classification cascade** below. The cascade is **judgment-first**: the agent reads the section's full context (name + ancestors + children + text content + visual signature) and picks the closest DS component before falling back to deterministic rules. The first rule that lands wins.
 
-#### Rule 1 — Existing key match
+> **Why judgment-first:** Real product files use semantic layer names that don't match a fixed alias table — "Idle Status", "Task Timer Container", "Project Header", "Time Separator". A deterministic alias table will silently skip these and leave the page raw. The cascade is structured so the agent must explicitly reason about each section before falling through to the dumb-defaults at the end.
 
-If the source section is already an `INSTANCE` and its `mainComponent.key` exists as a value in `component-map.json`, treat it as `exact-swap`. Preserve `instance.componentProperties` and carry variants over via `setProperties` after re-instantiating from the map (or, if the section is already in the same family, `swapComponent` to the canonical map entry to repoint at the Experiment-file source).
+#### Step A — Read the section's full context
 
-#### Rule 2 — Name alias match
+Before classifying, gather:
 
-Lowercase the source node name, strip punctuation, and look up against this alias table baked into the skill:
+1. **Layer name** + the chain of ancestor names up to the target frame. Names usually encode intent (`Task Timer Container > Task Status Container > Idle Status`).
+2. **Children:**
+   - For each child `TEXT` node: its `name`, `characters`, `fontSize`, `width`, `height`. Text content is the strongest semantic signal (`"IDLE"`, `"00:12:34"`, `"Drafting Proposals"`, `"Details"`).
+   - For each child `INSTANCE`: its `mainComponent.name`.
+   - Counts of `RECTANGLE` / `VECTOR` / `GROUP` / `FRAME` children.
+3. **Visual signature:** `cornerRadius` (bucketed: `none` 0, `xs` ≤4, `sm` ≤8, `md` ≤12, `lg` ≤16, `xl` ≤24, `full` >24), `hasStroke`, `hasFill`, `width`, `height`, `aspect ratio`.
+4. **Already-bound state:** does the section already use library instances? Are its fills/text-styles already bound to DS variables?
 
-| Source alias (lowercased)                             | DS component (from `component-map.json`) |
-| ----------------------------------------------------- | ---------------------------------------- |
-| `btn`, `button`, `cta`, `action`, `primary`, `secondary` | `Button`                                 |
-| `icon button`, `iconbutton`, `icon btn`               | `Icon Button`                            |
-| `tag`, `chip`, `pill`, `badge`                        | `Tag` (use `Badge` only if Tag absent)   |
-| `avatar`, `profile pic`, `user pic`                   | `Avatar`                                 |
-| `banner`, `alert`, `notice`                           | `Alert Banner`                           |
-| `input`, `text field`, `textfield`                    | `Input`                                  |
-| `checkbox`                                            | `Checkbox`                               |
-| `radio`                                               | `Radio Group`                            |
-| `switch`, `toggle`                                    | `Switch`                                 |
-| `dropdown`, `select`                                  | `Dropdown`                               |
-| `modal`, `dialog`                                     | `Modal`                                  |
-| `tooltip`                                             | `Tooltip`                                |
-| `sidebar`, `side nav`, `navigation rail`              | `Sidebar`                                |
+#### Rule 1 — Existing key match (deterministic)
 
-On hit, instantiate the mapped component and infer variant from visual cues — primary/secondary from fill role; outlined from stroke presence; with-icon from any nested `INSTANCE` whose name matches an `icon-map.json` entry; size from height bucket (`<32` → sm, `32–40` → md, `>40` → lg). Apply via `setProperties`.
+If the section is itself an `INSTANCE` and its `mainComponent.key` exists in `component-map.json`, treat as `exact-swap`. Preserve overrides via `setProperties` after re-instantiating from the map (or `swapComponent` to repoint at the canonical Experiment-file source).
 
-#### Rule 3 — Visual signature match (composition)
+#### Rule 2 — Semantic match (judgment)
 
-Compute a small signature for the section:
+Using the context from Step A, pick the **closest** DS component from `component-map.json` by reasoning about intent. The match doesn't need a literal name overlap — it needs a semantic fit.
 
-```js
-{
-  radiusBucket: "none" | "sm" | "md" | "lg" | "full",   // cornerRadius bucketed: 0, ≤4, ≤8, ≤16, full
-  hasStroke: boolean,                                    // any visible stroke
-  hasIcon: boolean,                                      // any child INSTANCE whose name is in icon-map.json
-  hasAvatar: boolean,                                    // any child INSTANCE whose name matches /avatar|profile/i
-  childCount: number,
-  role: "container" | "control" | "text"                 // container if has 2+ visible children; text if all children are TEXT; else control
-}
+**Write a one-line rationale** before swapping, so the report can show the reasoning:
+
+```
+<Source path>  →  <DS component>  (variant: <variant>)  — because <one-line reason>
 ```
 
-If at least two DS primitives' signatures match the section's children (e.g. an Avatar child and a Text child → compose Avatar + Text + optional Button), route to `compose-from-primitives` (Tier 2 in Step 8).
+Example rationales drawn from a real TimeWorks page (use as a learning reference, not a fixed table):
 
-#### Rule 4 — Fall through
+| Source layer (path) | Children / content | DS pick | Rationale |
+| ------------------- | ------------------ | ------- | --------- |
+| `Idle Status` (40×24 pill) | text "IDLE" + separator + duration | `Badge` (variant: warning/idle) | Small pill with status label + duration → status indicator. |
+| `Break Label` group | text "Lunch" + "-" + "00:30:00" | `Badge` (variant: info) | Same shape as Idle Status; label + duration. |
+| `Task Title` | text "Drafting Proposals" only | _no swap_ — Text-style only | Single text node; typography binding is sufficient. |
+| `Project Header` (94×24) | text "Projects" | _no swap_ — Text-style only | Section heading; one TEXT child. |
+| `Task Timer Container` (310×150) | Title + status pill + time readouts | `compose-from-primitives`: Text + Badge | No single component fits a multi-line timer header. |
+| `Project Task Title` row | name + "|" + time + "|" + short title | `compose-from-primitives`: `List item` | Repeated row → DS List item with overrides. |
+| `Input Field` | placeholder "Search Tasks" | `Search` (variant: Large/Default) | Magnifying-glass + placeholder → Search field. |
+| `"Details" labels` | text "Details", 10px, clickable look | `Link` (or Text styled as link) | Repeated affordance to expand a row. |
+| `Bottom Bar` (1400×44) | mixed status bar | Tier-3 `annotate-and-preserve` | App chrome with no DS analogue. |
 
-If none of Rules 1–3 fire, fall through to Tier 3 in Step 8 (`annotate-and-preserve`).
+Variant inference — from visual cues, in order:
 
-**Variant matching — never default blindly.** When Rule 1 or Rule 2 yields a family but the variant is still ambiguous, call it out in the report rather than silently choosing the component's default. The Experiment file's component pages document each component's available variant properties; consult them when intent is unclear.
+- **Size variant** from height bucket: `<28` → `xs/sm`, `28–36` → `md` (DS default), `>36` → `lg`.
+- **Tone variant** from text content + fill color:
+  - "IDLE" / "Pending" / yellow fill → `warning`
+  - "Working" / green fill / "Completed" → `positive`
+  - "Error" / "Failed" / red fill → `negative`
+  - "Lunch" / "Break" / neutral fill → `info` or `neutral`
+- **Outlined vs filled** from stroke presence.
+- **With-icon** if a nested INSTANCE name appears in `icon-map.json`.
+
+If the family is right but variant is genuinely ambiguous, instantiate the default and flag in the report with `⚠️ variant ambiguous` — do not silently pick.
+
+#### Rule 3 — Compose from primitives (when no single component fits)
+
+When a section is a container around multiple semantic pieces (e.g. row with avatar + name + role + action button), instantiate two or more DS primitives side-by-side and group them. Rationale line:
+
+```
+<Source path>  →  compose: <Primitive A> + <Primitive B> + ...  — because <reason>
+```
+
+Typical compositions:
+
+- Header row → `Avatar` + `Text` + `Button`
+- Timer header → `Text` (title) + `Badge` (status) + `Text` (time)
+- List row → `List item` with text overrides + optional `Tag`
+- Stat card → `Text` (label) + `Text` (number) + optional `Badge` (delta)
+
+#### Rule 4 — Token binding only (no component swap)
+
+When the section has no obvious DS component but is just text + simple shapes (e.g. a section heading, a label, a divider), do not swap. Instead:
+
+1. Bind every TEXT to the nearest DS text style by fontSize + weight.
+2. Bind every SOLID fill / stroke to a DS color variable. Prefer semantic tokens (`primary-text-color`, `secondary-text-color`, `ui-background-color`, `ui-border-color`) when the source RGB is a neutral; reserve named brand colors for accents.
+3. Bind every non-zero corner radius to a `space-*` token if its value matches the DS scale (4/8/12/16/24). If the value is non-standard (e.g. 100 for pill, 10, 5), record it as a **Tokens Studio gap** in the report rather than guessing.
+
+This rule applies to the **majority** of leaf elements on most product pages and is responsible for the bulk of "fonts / colors use the style, not raw values" outcomes.
+
+#### Rule 5 — Annotate-and-preserve (fall through)
+
+Only when Rules 1–4 all fail (truly bespoke chrome, no token equivalent, no semantic match): annotate the node with `figma_set_annotations` explaining why and leave it alone. Examples: custom app titlebars, bespoke marketing illustrations, demo placeholders that aren't part of the product.
+
+#### Tokens Studio gap reporting
+
+While running Rule 4, the skill collects raw values that have no DS equivalent (status palette RGBs, non-standard radii, custom shadows). In Step 10's report, surface these as a **`## Tokens Studio gaps`** section so the human can decide whether to:
+
+- Promote them to a new token family (e.g. add `status-idle`, `status-working`, `radius-full` to Tokens Studio), or
+- Rebuild the affected sections with DS primitives that bring their own styling.
+
+This converts every "leak" into either a Tokens Studio task or a compose-from-primitives task — both are clear next actions, neither is the skill's failure.
+
+**Variant matching — never default blindly.** When Rule 1 or Rule 2 yields a family but the variant is genuinely ambiguous, instantiate the default, flag the section with `⚠️ variant ambiguous` in the report, and move on. The Experiment file's component pages document each component's variant properties; consult them when intent is unclear.
 
 ### 6. Decide section strategy (per section)
 
