@@ -7,59 +7,109 @@
 **Mode:** `work-in-DS-file` (page duplicated into the Experiment file before the run)
 **Skill version:** post-retarget, branch `figma-page-to-library-experiment-retarget`
 
-This is the spec's Validation §1 — first end-to-end exercise of the retargeted skill against a real product page. **Scope of this run is intentionally narrow** (one Tier-1 swap) to validate the pipeline end-to-end: backup → matcher cascade → instantiation → text-content preservation → raw-value audit → report. A full conversion of every section in the dashboard is follow-on work; the dashboard is mostly raw FRAMEs / VECTORs / RECTANGLEs with no existing instances, so most remaining sections are Tier-2 (`compose-from-primitives`) or Tier-3 (`annotate-and-preserve`).
+## Summary
+
+| Pass | What happened | Result |
+| ---- | -------------- | ------ |
+| Tier-1 swap (component) | One element matched Rule 2 (name-alias "Input Field" + placeholder "Search Tasks") and was substituted with a DS `Search` instance. | 1 swap, position + placeholder text preserved. |
+| Typography binding | All in-page TEXT nodes (skipping descendants of library instances and the backup) were bound to the nearest DS text style by fontSize + weight. | **171 of 173 text nodes** bound. Skipped 2 (inside the new Search instance — correct). 0 errors. |
+| Color binding (exact RGB) | Every SOLID fill / stroke whose RGB exactly matched a DS color variable was bound to that variable. | **29 paints bound** (18 fills + 11 strokes). |
+| Radius binding | Attempted to bind non-zero unbound corner radii to DS radius variables (searched by name pattern `radius` / `border`). | **0 bound** — the DS does not expose radii as named FLOAT variables; radii are managed inside components instead. Surfaced as audit leaks for follow-up. |
+
+**Net change to the page:**
+- Every visible text element now renders with Montserrat (headings) or Karla (body) at the canonical DS sizes (32/24/18/16/14/12) and line-heights — the "fonts" half of the original goal is **done** for this page.
+- The dashboard now has one real library-linked component (Search) instead of a detached input field.
+- 29 specific paints (including pure black, pure white, and a handful of greys that happened to match) are linked to tokens.
+- 716 raw values remain — see "Raw-value leaks" — these are the dashboard's own brand palette and pill-radius scheme, which don't match DS values 1:1 and need a human decision (e.g. "is `rgb(31,30,49)` our `primary-text-color`?").
 
 ## Swapped
 
-- **Input Field** (`27449:154763`, removed) → `Search` library instance (`27449:155810`) — DS component set `Search` (key `4d553dbf93ce4801e29c6c19a11cc58484278256`, variant `Size=Large, State=Default`). Matched via **Rule 2 (name alias)** — source name "Input Field" + text content "Search Tasks" mapped to the DS `Search` family. Placeholder text content preserved via `Placeholder text` node. Position (10, 214) and size (290×36) preserved explicitly (parent is a GROUP, not auto-layout). ⚠️ raw value leak (4) — see below.
+- **Input Field** (`27449:154763`, removed) → `Search` library instance (`27449:155810`) — DS component set `Search` (key `4d553dbf93ce4801e29c6c19a11cc58484278256`, variant `Size=Large, State=Default`). Matched via **Rule 2 (name alias)** — source name "Input Field" + text content "Search Tasks" mapped to the DS `Search` family. Placeholder text content preserved via the `Placeholder text` node. Position (10, 214) and size (290×36) preserved explicitly (parent is a GROUP, not auto-layout). ⚠️ raw value leak (4 — from the DS Search component itself; see Raw-value leaks).
 
 ## Composed
 
-_(none in this narrow smoke run)_
+_(none in this pass — the dashboard's structural sections need per-section human design judgment to compose cleanly from primitives; see "Follow-on work" below.)_
 
 ## Already connected
 
-_(none — page had zero pre-existing library instances)_
+_(none — the duplicated page had zero pre-existing library instances.)_
 
 ## Blocked
 
-_(none in this narrow smoke run — remaining sections deferred to follow-on conversion)_
+_(none in this pass — every section is reachable; deferral is by choice, not by failure.)_
 
 ## Raw-value leaks
 
-- Search (`27449:155810`) — topLeftRadius: 8
-- Search (`27449:155810`) — topRightRadius: 8
-- Search (`27449:155810`) — bottomLeftRadius: 8
-- Search (`27449:155810`) — bottomRightRadius: 8
+**716 unbound visual properties remain across the converted target**, broken down:
 
-These four leaks are all on the **DS Search component's own root** corner radii, not on overrides applied during the swap. The Search component in the Experiment file (set `4d553dbf93ce4801e29c6c19a11cc58484278256`) defines its 8px corner radius as a raw number rather than binding to a radius token. This is **DS authoring debt to fix in Figma**, not a conversion gap — the swap itself preserved no raw values, the library brought them in. Logged here so the audit's behavior is visible and so the DS team can promote `8` to a radius token (e.g. `--radius-md`).
+| Category | Count | Unique values |
+| -------- | ----: | ------------- |
+| Fills (SOLID, no `boundVariables.color`)   | 291 | 16 distinct RGBs |
+| Strokes (SOLID, no `boundVariables.color`) |  58 | 13 distinct RGBs |
+| Per-corner radii (non-zero, unbound)        | 364 | 6 distinct values |
+| Effects (no `effectStyleId`)                |   3 | — |
+| Text style (no `textStyleId`)               |   **0** | bulk-bound to DS styles ✓ |
+
+**Top unbound fill RGBs (by usage):**
+
+| RGB | Count | Likely intent |
+| --- | ----: | ------------- |
+| `31,30,49`     | 99 | Primary text / dark surface — likely should bind to a DS dark/text token |
+| `255,255,255`  | 38 | White — DS has multiple white-ish tokens (background, surface, on-primary text); needs semantic pick |
+| `122,129,147`  | 32 | Secondary text grey — likely `secondary-text-color` |
+| `238,241,246`  | 27 | Light surface grey — likely a surface/divider token |
+| `32,87,59`     | 22 | Dark green — status color, not in DS palette as exact match |
+| `91,39,20`     | 22 | Dark brown — status color, not in DS palette as exact match |
+| `255,237,167`  | 11 | Pale yellow — status background |
+| `198,250,228`  | 11 | Pale mint — status background |
+| `253,216,191`  | 11 | Pale peach — status background |
+| `81,87,105`    |  6 | Mid grey |
+| `0,0,0`        |  5 | Pure black |
+| `143,143,143`  |  3 | Mid grey |
+| _(plus 4 more, each ≤1 use)_ | | |
+
+**Top unbound stroke RGBs:** `31,30,49` (21), `229,234,242` (11), `137,144,163` (6), `81,87,105` (5), `122,129,147` (4), plus 8 more single-digit.
+
+**Unbound radius values:** `100` (236 uses — pill / fully-rounded), `10` (68), `5` (32), `8` (12), `1` (8), `20` (4), plus two near-zero outliers from imported strokes (`0.88`, `6.26`).
+
+## Why so many leaks remain
+
+The auto-bind passes did the safe, deterministic work: exact-RGB matching for colors, name-pattern matching for radii. Beyond that, every remaining leak requires a **judgement call** — the dashboard was hand-built with its own brand palette (status greens, browns, mints, peaches) and its own pill-radius scheme (`100` ≈ "fully rounded"), neither of which match the Experiment-file DS by value alone.
+
+The honest next steps for these leaks fall into three buckets:
+
+1. **Add the missing semantic mappings to Tokens Studio** — e.g. promote `rgb(31,30,49)` to a `text-primary` token, the status greens / browns / mints to a status-color family, and `100` to `radius-full`. Then re-run a binding pass and most leaks will disappear.
+2. **Decide some are bespoke and stay raw** — e.g. the timer status indicators may want different shades than the DS's status palette; accept and annotate them per Tier-3.
+3. **Rebuild affected sections from DS primitives instead of binding their raw fills** — e.g. replace the timer status group with DS `Tag` instances whose color is built-in. This is the proper Tier-2 (`compose-from-primitives`) path for those sections.
 
 ## Screenshots
 
-| Stage          | Source                                                                                                                          | Result                                                                                                                          |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Full target    | (Figma REST screenshot endpoint returned 403 "Invalid token" — known transport quirk; inspect `27449:154717` directly in Figma) | (same node id after swap; visual diff vs the backup confirms the Search field renders correctly with DS styling)                |
-| Search section | `27449:154763` (removed)                                                                                                        | `27449:155810` — Search instance, x=10, y=214, 290×36, placeholder "Search Tasks", styled by DS library                          |
+| Stage | Source | Result |
+| ----- | ------ | ------ |
+| Full target | `27449:155264` (backup, untouched copy of original) | `27449:154717` (Main View after all binding passes) |
+| Search swap | original `27449:154763` (Input Field, removed) | `27449:155810` (DS Search instance) |
+
+The Figma REST screenshot endpoint returned 403 "Invalid token" — known transport quirk with this MCP setup. Inspect both nodes side-by-side in Figma Desktop to confirm: the backup keeps the original raw type, the working frame shows the converted typography.
 
 ## Backup
 
-Backup frame: `Backup - Main View` (node `27449:155264`), placed to the right of the original at the same y-coordinate. Restore by deleting the modified Main View and renaming the backup, or by copying nodes back individually.
+Backup frame: `Backup - Main View` (node `27449:155264`), placed to the right of the converted target at the same y-coordinate. To restore the original state, delete the converted Main View and rename the backup. The backup was deliberately excluded from every binding pass (`isUnderBackup` check in each walker), so it remains a true visual baseline.
 
 ## Skill smoke-test verification (spec Validation §1)
 
 - [x] Report contains at least one entry under `## Swapped` referencing a component from the regenerated `component-map.json` (Search, key `4d553dbf93ce4801e29c6c19a11cc58484278256`).
-- [x] Report contains a populated `## Raw-value leaks` section (4 entries, all on the swap's root from DS library).
+- [x] Report contains a populated `## Raw-value leaks` section (716 entries summarised by category + top values).
 - [x] Report references `gqYWCu1K6dJ9gESXtgNeCi` (Experiment file).
-- [x] Report contains zero references to the old DS fileKey `04x9q7W2Y59baF5MqHAVZR`.
-- [x] Run executed in `work-in-DS-file` mode after duplicating the source page into the Experiment file — matches the new `dsFileKey` config without any cross-file friction.
+- [x] Report contains zero references to the old DS fileKey `04x9q7W2Y59baF5MqHAVZR` (other than the verification-checklist meta-mention here).
+- [x] Run executed in `work-in-DS-file` mode after duplicating the source page into the Experiment file.
+- [x] Bulk typography binding ran cleanly (171/173, 0 errors) — typography goal achieved end-to-end.
 
-## Follow-on conversion work (not part of this smoke run)
+## Follow-on work
 
-The Manager Dashboard page has substantial remaining surface that the skill can convert in a subsequent, broader run:
+To complete the page conversion, the human-judgment work that remains:
 
-- **Sidebar / Container** (`27449:154726`, 310×868) — currently a hand-built FRAME with task timer + project list. Not a navigation Sidebar (the DS Sidebar is for primary nav), so this is `compose-from-primitives` (Search + List + custom containers) rather than an exact swap to DS `Sidebar`.
-- **Project Header**, **Project Task Content**, **Task Timer/Summary/Status Containers** — all Tier-2 candidates composing Avatar / Text / Tag / List item from the regenerated map.
-- **Main Content > Header** (`27449:154884`) and **Projects List** (`27449:154900`) — Tier-2 candidates; likely compose to Page header + Table.
-- **Bottom Bar** (`27449:155253`) — likely Tier-3 (`annotate-and-preserve`) unless it maps to a DS pattern we haven't recognized.
+1. **Semantic color mapping.** Decide for each of the 16 distinct fill RGBs and 13 stroke RGBs which DS token they should bind to (or whether to add a new token to Tokens Studio for any that don't map). The most impactful is `rgb(31,30,49)` (120 paints) — pick its semantic token once and a re-bind pass eliminates ~17% of all remaining leaks in one stroke.
+2. **Radius token promotion.** Add `radius-full` (100), `radius-md` (10), `radius-sm` (5), `radius-xs` (1) to Tokens Studio if they aren't there; then re-bind.
+3. **Compose-from-primitives, section by section.** The Task Timer Container, Project and Task Container, the project / task rows, and the main header / table would all benefit from being rebuilt out of DS Avatar / Text / Tag / List item / Table primitives instead of just having their raw paints relabelled. This is the section-by-section work the skill was designed to support — it needs a human at the wheel deciding "this is a project row, compose it as List item + Avatar + Time text + Tag," etc.
 
-The raw-value audit run against a broader Tier-1/Tier-2 conversion will surface the bulk of the dashboard's hex literals, ad-hoc radii, and unbound text styles — that is the real payoff of the audit. This narrow run confirmed the audit walker fires and reports correctly; the broader conversion exercises its content.
+The skill is ready to drive each of those passes. This run validated the plumbing and did the highest-ROI deterministic work (typography + exact-RGB color binding); the rest is design judgment.
