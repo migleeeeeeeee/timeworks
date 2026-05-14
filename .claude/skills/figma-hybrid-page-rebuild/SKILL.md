@@ -184,3 +184,122 @@ return { removed };
 ```
 
 `insertedSourceSectionCount` (used by exit-gate C1) is the count of successful inserts from this step.
+
+### 8. Patch text slots from source via slot-map
+
+Read `slot-map.json`. For each entry:
+
+1. Locate the target TEXT node in the new clone by resolving the slot key as a name-path under the clone root.
+2. Resolve the `from` recipe:
+   - `kind: "sourceText"` — walk the source (or the backup) using `where` as a name-path, then pick by the `pick` rule (`largest` / `smallest` / `nth:N` based on `fontSize`).
+   - `kind: "literal"` — use `value` verbatim.
+   - `kind: "keep"` — leave the template's string unchanged; continue.
+3. Write the resolved value into the target TEXT node.
+
+Bulletproof text-writing pattern (lifted from the source session):
+
+```javascript
+await figma.loadAllPagesAsync();
+const findByPath = (root, pathStr) => {
+  const segs = pathStr.split(" > ").map(s => s.trim());
+  let cur = root;
+  for (const seg of segs) {
+    if (!cur || !("children" in cur)) return null;
+    cur = cur.children.find(c => c.name === seg);
+    if (!cur) return null;
+  }
+  return cur;
+};
+const writeText = async (node, value) => {
+  if (typeof node.fontName === "object" && node.fontName !== figma.mixed) {
+    await figma.loadFontAsync(node.fontName);
+  }
+  node.characters = value;
+};
+
+// Apply one slot:
+const clone = await figma.getNodeByIdAsync("<cloneId>");
+const target = findByPath(clone, "<slotKey>");
+const value = "<resolvedValue>";
+if (!target) {
+  // log "slot unresolved: <slotKey>" — do NOT halt
+} else {
+  await writeText(target, value);
+}
+```
+
+For `sourceText` recipes, the `where` path is resolved against the source (or its backup) by the same `findByPath` helper. The `pick` rule:
+
+```javascript
+const pickRule = (textNodes, pick) => {
+  if (pick === "largest") return textNodes.slice().sort((a, b) => (b.fontSize ?? 0) - (a.fontSize ?? 0))[0];
+  if (pick === "smallest") return textNodes.slice().sort((a, b) => (a.fontSize ?? 0) - (b.fontSize ?? 0))[0];
+  if (pick.startsWith("nth:")) return textNodes[Number(pick.slice(4))];
+  return textNodes[0];
+};
+const allText = (root) => root.findAllWithCriteria ? root.findAllWithCriteria({ types: ["TEXT"] }) : root.findAll(n => n.type === "TEXT");
+```
+
+For each unresolved slot, log `{ slotKey, reason }` and continue. Track unresolved-count for the report.
+
+### 9. Cleanup passes (a, b, c — in order)
+
+#### 9a. Pattern-swap pass
+
+Read `pattern-swaps.json`. For each pattern (currently: Linear Progress Bar), walk the new dashboard and evaluate the detector. First-match wins per node.
+
+**`track-and-fill` detector logic:**
+
+```javascript
+const isInsideInstance = (n) => { let p = n.parent; while (p) { if (p.type === "INSTANCE") return true; p = p.parent; } return false; };
+
+const candidates = [];
+const visit = (n, rootId) => {
+  if (!n) return;
+  if (n.id !== rootId && isInsideInstance(n)) return;
+  if ((n.type === "GROUP" || n.type === "FRAME") && n.children?.length === 2 && n.height && n.height <= 10) {
+    const [a, b] = n.children;
+    const isThinShape = (x) => (x.type === "RECTANGLE" || x.type === "VECTOR") && x.height <= 10;
+    if (isThinShape(a) && isThinShape(b)) {
+      const track = a.width >= b.width ? a : b;
+      const fill = a.width >= b.width ? b : a;
+      if (fill.width / track.width < 1.0) {
+        candidates.push({ node: n, trackW: track.width, fillW: fill.width });
+      }
+    }
+  }
+  if ("children" in n) for (const c of n.children) visit(c, rootId);
+};
+const root = await figma.getNodeByIdAsync("<cloneId>");
+visit(root, root.id);
+```
+
+For each candidate:
+
+```javascript
+const lpb = await figma.getNodeByIdAsync("46946:16402"); // variantId from pattern-swaps.json
+let swapped = 0;
+for (const { node, trackW, fillW } of candidates) {
+  const parent = node.parent;
+  const x = node.x, y = node.y;
+  const w = node.width, h = node.height;
+  const idx = parent.children.indexOf(node);
+  const pct = Math.round((fillW / trackW) * 100);
+  const instance = lpb.createInstance();
+  parent.insertChild(idx, instance);
+  instance.x = x;
+  instance.y = y;
+  instance.resize(w, Math.max(h, instance.height));
+  const pctKey = Object.keys(instance.componentProperties).find(k => k.toLowerCase().startsWith("percentage"));
+  if (pctKey) {
+    try { instance.setProperties({ [pctKey]: pct + "%" }); } catch (e) {}
+  }
+  node.remove();
+  swapped++;
+}
+return { swapped };
+```
+
+Log `{ patternName: "Linear Progress Bar", swappedCount, sampleProps }` for the report.
+
+After the pass, re-scan to confirm `unswappedPatternMatches === 0` (used by exit-gate C4). If any remain, log them with reasons and continue — don't halt.
