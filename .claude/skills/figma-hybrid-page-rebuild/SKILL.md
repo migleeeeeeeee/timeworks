@@ -470,3 +470,131 @@ return { borderedCount: added, candidateCount: candidates.length };
 ```
 
 `unborderedCardCount` (used by exit-gate C3) is `candidates.length - added` (should be 0).
+
+### 10. Delete source + exit gate
+
+#### 10a. Audit walker
+
+Run a read-only audit across the new clone:
+
+```javascript
+await figma.loadAllPagesAsync();
+const ALLOW = ["toast","slider","modal"];
+const skipUnderInstance = (n) => { let p = n.parent; while (p) { if (p.type === "INSTANCE") return true; p = p.parent; } return false; };
+const allowlisted = (n) => { let p = n; while (p) { if (ALLOW.some(a => (p.name || "").toLowerCase().includes(a))) return true; p = p.parent; } return false; };
+const leaks = [];
+const visit = (n, rootId) => {
+  if (!n) return;
+  if (n.id !== rootId && skipUnderInstance(n)) return;
+  if (allowlisted(n)) return;
+  if (Array.isArray(n.fills)) for (const p of n.fills) if (p.type === "SOLID" && !p.boundVariables?.color) leaks.push({ id: n.id, name: n.name, prop: "fill" });
+  if (Array.isArray(n.strokes)) for (const p of n.strokes) if (p.type === "SOLID" && !p.boundVariables?.color) leaks.push({ id: n.id, name: n.name, prop: "stroke" });
+  for (const k of ["topLeftRadius","topRightRadius","bottomLeftRadius","bottomRightRadius"]) {
+    const v = n[k];
+    if (typeof v === "number" && v !== 0 && !n.boundVariables?.[k]) leaks.push({ id: n.id, name: n.name, prop: k });
+  }
+  if (n.type === "TEXT" && !n.textStyleId) {
+    const bv = n.boundVariables ?? {};
+    if (!bv.fontFamily || !bv.fontSize || !bv.lineHeight) leaks.push({ id: n.id, name: n.name, prop: "text" });
+  }
+  if ("children" in n) for (const c of n.children) visit(c, rootId);
+};
+const root = await figma.getNodeByIdAsync("<cloneId>");
+visit(root, root.id);
+return { leakCount: leaks.length, sample: leaks.slice(0, 10) };
+```
+
+#### 10b. Evaluate exit gate
+
+Compute the five checks:
+
+| Check | Pass condition |
+|---|---|
+| C1 | `insertedSourceSectionCount >= 1` (from step 7) |
+| C2 | `leakCount === 0` (from 10a) |
+| C3 | `unborderedCardCount === 0` (from 9c) |
+| C4 | `unswappedPatternMatches === 0` (from 9a re-scan) |
+| C5 | User visual confirm (next sub-step) |
+
+If any of C1–C4 fails, write a `-halted.md` report naming the failing checks and exit. Do NOT proceed to C5.
+
+#### 10c. Delete the original source
+
+If C1–C4 all pass:
+
+```javascript
+await figma.loadAllPagesAsync();
+const src = await figma.getNodeByIdAsync("<sourceNodeId>");
+src.remove();
+return { removed: "<sourceNodeId>" };
+```
+
+The backup is preserved.
+
+#### 10d. Screenshot attempt (graceful 403)
+
+```
+Try: figma_take_screenshot({ nodeId: "<cloneId>" })
+On 403: log "visual validation skipped — REST 403", set `screenshotSkipped = true`, continue.
+On success: save the URI for the report.
+```
+
+Never halt on screenshot failure.
+
+#### 10e. User visual confirm — exact prompt
+
+Use `AskUserQuestion`:
+
+> Rebuild done. **C1**: inserted `<N>` source sections. **C2**: 0 raw-value leaks. **C3**: `<M>` cards bordered. **C4**: `<K>` pattern swaps applied. Please look at `<cloneName>` (node `<cloneId>`) in Figma and pick: `y` (looks right, write report), `fix` (describe what's wrong), `revert` (delete the new frame, restore the backup).
+
+Behavior:
+- **`y`** — write full report (10f), run ends successful.
+- **`fix`** — user describes the issue in free text, skill iterates in-session (re-run targeted passes, re-check C1–C4, re-ask C5).
+- **`revert`** — delete the new clone, restore the backup to source's original `(x, y)` and original name, write `-reverted.md` short report, exit.
+
+```javascript
+// Revert path
+await figma.loadAllPagesAsync();
+const clone = await figma.getNodeByIdAsync("<cloneId>");
+const backup = await figma.getNodeByIdAsync("<backupId>");
+const parent = clone.parent;
+const x = clone.x, y = clone.y;
+const origName = "<original source name>";
+clone.remove();
+backup.x = x;
+backup.y = y;
+backup.name = origName;
+return { restored: backup.id };
+```
+
+#### 10f. Write the report
+
+On `y`, write `docs/superpowers/runs/YYYY-MM-DD-<source-file-slug>-<source-page-slug>-hybrid-rebuild.md` with sections:
+
+1. Header (file, source URL, target node, template node, mode=hybrid, backup, date).
+2. Approach (one paragraph for the designer).
+3. Sections brought from source (list with new node ids).
+4. Template sections removed (the `replaceableBodyChildren` list).
+5. Text slots patched (table; unresolved slots flagged `⚠️`).
+6. Pattern swaps applied (table by pattern + count + sample computed props).
+7. Token-bindings applied (counts: texts/fills/strokes/radii/instance overrides).
+8. Card borders applied (count + exclusion filter transparency).
+9. Raw-value leaks (always present; `✓ No raw values detected.` if zero).
+10. Exit gate (C1–C5 pass/fail + user's verbatim C5 response).
+11. Backup (name + node id + instruction to delete when confident).
+12. Notes for the designer (auto-generated callouts).
+
+## Failure modes
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `figma_get_status` reports DS file not open | DS Experiment file not loaded in Figma Desktop | Open `gqYWCu1K6dJ9gESXtgNeCi`, re-run. |
+| Step 3 throws "no wrapper > main column" | Source doesn't have the expected layout shape | This skill is built for the wrapper+main-column shape only. Use `figma-page-to-library` for arbitrary layouts. |
+| `figma_execute` times out (>30s) | Per-payload node budget too high | Chunk by section, ≤200 nodes per call. Use a cursor pattern. |
+| 403 "Invalid token" from `figma_take_screenshot` | REST endpoint auth not configured | Skill swallows and continues. Report says "metadata-only run". |
+| Pattern-swap matched but variant not found | `variantId` in `pattern-swaps.json` is stale | Find the new id by listing the COMPONENT_SET's children. |
+| Component not in `component-map.json` | DS added a new component since the map was regenerated | Log warning, skip swap. User adds entry + re-runs. |
+| Desktop Bridge plugin closes mid-run | Payload called `figma.closePlugin` | Bug — fix the payload to `return` results / `throw` errors instead. |
+| All exit checks pass but user says `fix` | Visual issue not caught by C1–C4 | Iterate in-session per user's description, re-run targeted passes. |
+| Backup frame missing at end of run | Step 4 failed silently | Bug — Step 4 is a hard pre-condition. Restore backup creation. |
+| C5 not reached because C1–C4 failed | Earlier pass broke | Read the `-halted.md` report. Most common: C1 fails because user deselected every section in step 6. |
