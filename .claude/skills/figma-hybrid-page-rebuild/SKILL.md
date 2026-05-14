@@ -303,3 +303,170 @@ return { swapped };
 Log `{ patternName: "Linear Progress Bar", swappedCount, sampleProps }` for the report.
 
 After the pass, re-scan to confirm `unswappedPatternMatches === 0` (used by exit-gate C4). If any remain, log them with reasons and continue — don't halt.
+
+#### 9b. Token-binding pass
+
+Walks the new dashboard, snaps every raw fill/stroke/radius/text to the nearest DS token. Skips descendants of remote DS instances (their styling resolves through the library). Runs a second sub-pass over instance-level overrides.
+
+Loaded from the source session run; proven on 791 nodes / 1229 bindings with zero errors. Lifted verbatim:
+
+```javascript
+await figma.loadAllPagesAsync();
+const collections = await figma.variables.getLocalVariableCollectionsAsync();
+const colorColl = collections.find(c => c.name === "Color Tokens");
+const spaceColl = collections.find(c => c.name === "Spacing Tokens");
+const vars = await figma.variables.getLocalVariablesAsync();
+const colorVars = vars.filter(v => v.variableCollectionId === colorColl.id);
+const spaceVars = vars.filter(v => v.variableCollectionId === spaceColl.id);
+const byName = {};
+for (const v of colorVars) byName[v.name] = v;
+const colorEntries = colorVars.map(v => ({ v, c: v.valuesByMode[colorColl.defaultModeId] }));
+const neutrals = [
+  "primary-background-color","secondary-background-color","ui-background-color","grey-background-color",
+  "allgrey-background-color","primary-text-color","secondary-text-color","placeholder-color","icon-color",
+  "ui-border-color","layout-border-color","disabled-text-color","disabled-background-color",
+  "primary-color","text-color-on-primary","fixed-light-color","fixed-dark-color"
+];
+const semEntries = neutrals.map(n => byName[n] ? { v: byName[n], c: byName[n].valuesByMode[colorColl.defaultModeId] } : null).filter(Boolean);
+const dist = (a, b) => { const dr = a.r-b.r, dg = a.g-b.g, db = a.b-b.b; return dr*dr + dg*dg + db*db; };
+function nearestColor(rgb) {
+  const sat = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
+  const pool = sat < 0.10 ? semEntries : colorEntries;
+  let best = pool[0], bestD = Infinity;
+  for (const e of pool) { const d = dist(rgb, e.c); if (d < bestD) { bestD = d; best = e; } }
+  return best.v;
+}
+const spaceList = spaceVars.map(v => ({ v, value: v.valuesByMode[spaceColl.defaultModeId] }));
+function nearestSpace(n) { let b = spaceList[0], bd = Infinity; for (const s of spaceList) { const d = Math.abs(s.value - n); if (d < bd) { bd = d; b = s; } } return b.v; }
+const textStyles = await figma.getLocalTextStylesAsync();
+function pickTextStyle(fontSize, weight) {
+  const buckets = [32, 24, 18, 16, 14, 12];
+  let bucket = buckets[0], bd = Infinity;
+  for (const b of buckets) { const d = Math.abs(b - fontSize); if (d < bd) { bd = d; bucket = b; } }
+  const prefix = bucket === 32 ? "H1 (32px)" : bucket === 24 ? "H2 (24px)" : bucket === 18 ? "H3 (18px)" :
+                 bucket === 16 ? "Text1 (16px)" : bucket === 14 ? "Text2 (14px)" : "Text3 (12px)";
+  const w = (weight || "Regular").toLowerCase();
+  let suffix = w.includes("bold") && !w.includes("semi") ? "Bold" :
+               w.includes("semi") ? "Medium" :
+               w.includes("medium") ? "Normal" :
+               (w.includes("light") || w.includes("thin")) ? "Light" : "Normal";
+  return textStyles.find(s => s.name === `${prefix}/${suffix}`) || textStyles.find(s => s.name.startsWith(prefix));
+}
+
+const stats = { textsBound: 0, fillsBound: 0, strokesBound: 0, radiiBound: 0, visited: 0, skippedInstances: 0, errors: [] };
+async function bindNode(n) {
+  if (Array.isArray(n.fills)) {
+    const nf = []; let ch = false;
+    for (const p of n.fills) {
+      if (p.type === "SOLID" && !p.boundVariables?.color) {
+        try { nf.push(figma.variables.setBoundVariableForPaint(p, "color", nearestColor(p.color))); stats.fillsBound++; ch = true; }
+        catch (e) { nf.push(p); stats.errors.push("f " + n.id + ": " + e.message); }
+      } else nf.push(p);
+    }
+    if (ch) try { n.fills = nf; } catch (e) { stats.errors.push("sf " + n.id + ": " + e.message); }
+  }
+  if (Array.isArray(n.strokes)) {
+    const ns = []; let ch = false;
+    for (const p of n.strokes) {
+      if (p.type === "SOLID" && !p.boundVariables?.color) {
+        try { ns.push(figma.variables.setBoundVariableForPaint(p, "color", nearestColor(p.color))); stats.strokesBound++; ch = true; }
+        catch (e) { ns.push(p); }
+      } else ns.push(p);
+    }
+    if (ch) try { n.strokes = ns; } catch (e) {}
+  }
+  for (const k of ["topLeftRadius","topRightRadius","bottomLeftRadius","bottomRightRadius"]) {
+    const val = n[k];
+    if (typeof val === "number" && val !== 0 && !n.boundVariables?.[k]) {
+      try { n.setBoundVariable(k, nearestSpace(val)); stats.radiiBound++; } catch (e) {}
+    }
+  }
+  if (n.type === "TEXT" && !n.textStyleId) {
+    const fs = typeof n.fontSize === "number" ? n.fontSize : 14;
+    const fn = n.fontName === figma.mixed ? null : n.fontName;
+    const style = pickTextStyle(fs, fn?.style);
+    if (style) {
+      try { await n.setTextStyleIdAsync(style.id); stats.textsBound++; } catch (e) {}
+    }
+  }
+}
+
+// Pass A — walk skipping into INSTANCE children
+async function walkA(n, isRoot) {
+  if (!n) return;
+  stats.visited++;
+  if (!isRoot && n.type === "INSTANCE") { stats.skippedInstances++; return; }
+  await bindNode(n);
+  if ("children" in n) for (const c of n.children) await walkA(c, false);
+}
+
+// Pass B — bind instance overrides on the instance node itself, do not descend
+async function walkB(n, depth) {
+  if (!n) return;
+  await bindNode(n);
+  if (n.type === "INSTANCE" && depth > 0) return;
+  if ("children" in n) for (const c of n.children) await walkB(c, depth + 1);
+}
+
+const root = await figma.getNodeByIdAsync("<cloneId>");
+await walkA(root, true);
+await walkB(root, 0);
+return stats;
+```
+
+Run with `timeout: 30000` (max). For 800-node pages this completes in ~5–8 seconds.
+
+#### 9c. Card-border pass
+
+Adds a 1px stroke bound to `layout-border-color` to every card-shaped frame. Idempotent — re-running adds nothing.
+
+```javascript
+await figma.loadAllPagesAsync();
+const vars = await figma.variables.getLocalVariablesAsync();
+const collections = await figma.variables.getLocalVariableCollectionsAsync();
+const colorColl = collections.find(c => c.name === "Color Tokens");
+const borderVar = vars.find(v => v.name === "layout-border-color" && v.variableCollectionId === colorColl.id);
+if (!borderVar) throw new Error("layout-border-color not found");
+
+const BLOCKLIST = ["dashboard","header","toolbar","wrapper","main container","background blobs","sidebar","frame 1707485095"];
+const isInsideInstance = (n) => { let p = n.parent; while (p) { if (p.type === "INSTANCE") return true; p = p.parent; } return false; };
+const isBlocklisted = (n) => {
+  let p = n;
+  while (p && p.type !== "PAGE") {
+    if (BLOCKLIST.some(name => (p.name || "").toLowerCase().includes(name))) return true;
+    p = p.parent;
+  }
+  return false;
+};
+
+const root = await figma.getNodeByIdAsync("<cloneId>");
+const pageWidth = root.width;
+const candidates = [];
+const visit = (n, rootId) => {
+  if (!n) return;
+  if (n.id !== rootId && isInsideInstance(n)) return;
+  if (n.type === "FRAME") {
+    const hasFill = Array.isArray(n.fills) && n.fills.some(p => p.type === "SOLID" && p.visible !== false);
+    const hasRadius = ["topLeftRadius","topRightRadius","bottomLeftRadius","bottomRightRadius"].some(k => typeof n[k] === "number" && n[k] !== 0);
+    const hasStroke = Array.isArray(n.strokes) && n.strokes.length > 0;
+    const widthOK = n.width < pageWidth * 0.95;
+    const nameOK = !isBlocklisted(n);
+    if (hasFill && hasRadius && !hasStroke && widthOK && nameOK) candidates.push(n);
+  }
+  if ("children" in n) for (const c of n.children) visit(c, rootId);
+};
+visit(root, root.id);
+
+let added = 0;
+for (const n of candidates) {
+  let stroke = { type: "SOLID", color: { r: 0.85, g: 0.85, b: 0.85 } };
+  stroke = figma.variables.setBoundVariableForPaint(stroke, "color", borderVar);
+  n.strokes = [stroke];
+  n.strokeWeight = 1;
+  if ("strokeAlign" in n) n.strokeAlign = "INSIDE";
+  added++;
+}
+return { borderedCount: added, candidateCount: candidates.length };
+```
+
+`unborderedCardCount` (used by exit-gate C3) is `candidates.length - added` (should be 0).
