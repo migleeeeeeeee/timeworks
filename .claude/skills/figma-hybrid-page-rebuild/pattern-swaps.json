@@ -1,0 +1,19 @@
+{
+  "Linear Progress Bar": {
+    "dsComponent": "Linear Progress Bar",
+    "variantId": "46946:16402",
+    "variantPath": "Type=Primary, Size=Small, Label=Off",
+    "detector": {
+      "kind": "track-and-fill",
+      "containerType": ["GROUP", "FRAME"],
+      "maxHeight": 10,
+      "childCount": 2,
+      "childTypes": ["RECTANGLE", "VECTOR"],
+      "fillIsSmallerSibling": true
+    },
+    "props": {
+      "Percentage": { "from": "computed:fillWidth/trackWidth*100 + '%'" }
+    },
+    "preservePositionAndSize": true
+  }
+}

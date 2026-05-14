@@ -1,0 +1,29 @@
+{
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Date Range Selector > User Info and Search Container > User Info Container > User Name": {
+    "from": { "kind": "sourceText", "where": "main column > date range selector > user info container > user name", "pick": "largest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484992 > Activity Title": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 1 > activity title", "pick": "smallest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484992 > Activity Value": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 1 > activity value", "pick": "largest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484993 > Activity Title": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 2 > activity title", "pick": "smallest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484993 > Activity Value": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 2 > activity value", "pick": "largest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484994 > Activity Title": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 3 > activity title", "pick": "smallest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484994 > Activity Value": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 3 > activity value", "pick": "largest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484995 > Activity Title": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 4 > activity title", "pick": "smallest" }
+  },
+  "Main Container > Frame 1707485093 > Frame 1707484991 > Frame 1707485095 > Frame 1707484994 > Frame 1707484995 > Activity Value": {
+    "from": { "kind": "sourceText", "where": "main column > stat-cards row > card 4 > activity value", "pick": "largest" }
+  }
+}

@@ -1,6 +1,6 @@
 ---
 name: figma-page-to-library
-description: Connects an existing Figma page or frame in a TimeWorks product file to the published Design System library — replacing detached layers, local wrappers, and one-off components with library instances or compositions of library primitives. Section-by-section, not all-at-once. Drives the figma-console MCP via Plugin API only; both the source file AND the DS library file (`04x9q7W2Y59baF5MqHAVZR`) must be open in Figma Desktop. Use when the user pastes a Figma URL with intent like "convert this page to the library", "rebuild this in the design system", "swap to library components". Does NOT generate React code — that is the figma-to-code skill.
+description: Connects an existing Figma page or frame in a TimeWorks product file to the published Design System library — replacing detached layers, local wrappers, and one-off components with library instances or compositions of library primitives. Section-by-section, not all-at-once. Drives the figma-console MCP via Plugin API only; both the source file AND the DS file named in `ds-config.json` (currently the Experiment file `gqYWCu1K6dJ9gESXtgNeCi`) must be open in Figma Desktop. Use when the user pastes a Figma URL with intent like "convert this page to the library", "rebuild this in the design system", "swap to library components". Does NOT generate React code — that is the figma-to-code skill.
 ---
 
 # figma-page-to-library
@@ -17,11 +17,11 @@ Use this skill for an existing Figma page that should reuse the published TimeWo
 - `apply-known-scope` — the user already knows which section or frame should be brought onto the design system (most common).
 - `work-in-DS-file` — the target page has already been duplicated into the DS file; the skill operates locally with no cross-file imports.
 
-If the URL points to a `PAGE` → `review-then-apply`. If it points to a `FRAME` / `SECTION` → `apply-known-scope`. If `fileKey == 04x9q7W2Y59baF5MqHAVZR` and the URL points to a duplicated product page → `work-in-DS-file`.
+If the URL points to a `PAGE` → `review-then-apply`. If it points to a `FRAME` / `SECTION` → `apply-known-scope`. If `fileKey == dsFileKey` (from `ds-config.json`) and the URL points to a duplicated product page → `work-in-DS-file`.
 
 **Prerequisites for best results:**
 
-Both the source product file AND the DS file (`04x9q7W2Y59baF5MqHAVZR`) must be open in Figma Desktop. **For smoothest workflow, manually duplicate the target page into the DS file first:**
+Both the source product file AND the DS file (key from `ds-config.json`) must be open in Figma Desktop. **For smoothest workflow, manually duplicate the target page into the DS file first:**
 
 1. In the source file, right-click the page tab
 2. Select "Move to file" or "Duplicate to file"
@@ -37,17 +37,17 @@ Correct pattern: `return` the result from the async IIFE; `throw` on error.
 
 ```javascript
 // ✅ Correct — Desktop Bridge stays alive
-(async () => {
-  const frame = await figma.getNodeByIdAsync("FRAME_ID");
+;(async () => {
+  const frame = await figma.getNodeByIdAsync("FRAME_ID")
   // ...do work...
-  return { sections };
-})()
-
-// ❌ Wrong — closes the Desktop Bridge plugin
-(async () => {
-  // ...
-  figma.closePlugin(JSON.stringify({ sections }));  // ← BRIDGE DIES HERE
-})()
+  return { sections }
+})()(
+  // ❌ Wrong — closes the Desktop Bridge plugin
+  async () => {
+    // ...
+    figma.closePlugin(JSON.stringify({ sections })) // ← BRIDGE DIES HERE
+  }
+)()
 ```
 
 Any code pattern copied from skills written for the official Figma MCP (Eden Spiekermann's `apply-design-system`, etc.) must be retargeted to use `return` / `throw`. `figma.notify(...)` is fine for visible debug output and does not affect the bridge.
@@ -82,17 +82,18 @@ Do not treat a section as "connected" just because it contains a few design-syst
 
 1. A Figma Desktop instance is connected.
 2. Source `fileKey` (parsed from the URL) is open.
-3. DS `fileKey` `04x9q7W2Y59baF5MqHAVZR` is open.
+3. DS `fileKey` (read from `.claude/skills/figma-page-to-library/ds-config.json` as `dsFileKey`) is open.
 
+Read `ds-config.json` once at the start of the run and reuse the resolved `dsFileKey` everywhere below.
 If anything is missing, halt with a specific message naming what to fix.
 
 ### 2. Determine scope
 
 Parse the URL into `fileKey` + `nodeId`.
 
-**If `fileKey == 04x9q7W2Y59baF5MqHAVZR`:** This is a `work-in-DS-file` run. The DS file contains both the library components AND the duplicated product page. Proceed normally; skip the cross-file import steps below.
+**If `fileKey == dsFileKey`:** This is a `work-in-DS-file` run. The DS file contains both the library components AND the duplicated product page. Proceed normally; skip the cross-file import steps below.
 
-**If `fileKey != 04x9q7W2Y59baF5MqHAVZR`:** This is a source-file run. Navigate to that file.
+**If `fileKey != dsFileKey`:** This is a source-file run. Navigate to that file.
 
 **Call:** `mcp__figma-console__figma_navigate` to the target URL (source file or DS file).
 
@@ -105,6 +106,7 @@ If `review-then-apply` and the page has many sections, list the top-level sectio
 **Call:** `mcp__figma-console__figma_take_screenshot` of the source target. Save URI for the deliverable.
 
 **Call:** `mcp__figma-console__figma_execute` with code that:
+
 - Duplicates the target page or frame.
 - Names the duplicate `Backup - <original name>` and places it to the right of the original.
 - Returns the backup node id.
@@ -124,25 +126,27 @@ The skill works on the **original** target. The backup is the safety net.
 Read-only inventory pattern (figma-console-mcp safe — uses `return`, NOT `figma.closePlugin`):
 
 ```javascript
-(async () => {
-  const frame = await figma.getNodeByIdAsync("FRAME_ID");
+;(async () => {
+  const frame = await figma.getNodeByIdAsync("FRAME_ID")
   if (!frame) {
-    throw new Error("Frame FRAME_ID not found on the active page");
+    throw new Error("Frame FRAME_ID not found on the active page")
   }
-  const sections = frame.findAll(n => n.type === "INSTANCE").map(inst => {
-    const mc = inst.mainComponent;
-    const cs = mc?.parent?.type === "COMPONENT_SET" ? mc.parent : null;
-    return {
-      instanceId: inst.id,
-      instanceName: inst.name,
-      componentName: mc?.name ?? null,
-      componentKey: mc?.key ?? null,
-      componentSetName: cs?.name ?? null,
-      componentSetKey: cs?.key ?? null,
-      isRemote: mc?.remote ?? false,
-    };
-  });
-  return { sections };
+  const sections = frame
+    .findAll((n) => n.type === "INSTANCE")
+    .map((inst) => {
+      const mc = inst.mainComponent
+      const cs = mc?.parent?.type === "COMPONENT_SET" ? mc.parent : null
+      return {
+        instanceId: inst.id,
+        instanceName: inst.name,
+        componentName: mc?.name ?? null,
+        componentKey: mc?.key ?? null,
+        componentSetName: cs?.name ?? null,
+        componentSetKey: cs?.key ?? null,
+        isRemote: mc?.remote ?? false
+      }
+    })
+  return { sections }
 })()
 ```
 
@@ -172,20 +176,140 @@ Each entry points at one specific COMPONENT (the "default" variant for variant-b
 
 `figma_search_components` is similarly forbidden as a discovery path. The map is the only source.
 
-For each section in the inventory, decide:
+For each section in the inventory, the agent reasons through the **classification cascade** below. The cascade is **judgment-first**: the agent reads the section's full context (name + ancestors + children + text content + visual signature) and picks the closest DS component before falling back to deterministic rules. The first rule that lands wins.
 
-- which map entry (by name) is the right family
-- what variant properties to apply via `setProperties` after instantiation
-- one-to-one swap vs composition
-- text/instance property keys needed for overrides
+> **Why judgment-first:** Real product files use semantic layer names that don't match a fixed alias table — "Idle Status", "Task Timer Container", "Project Header", "Time Separator". A deterministic alias table will silently skip these and leave the page raw. The cascade is structured so the agent must explicitly reason about each section before falling through to the dumb-defaults at the end.
 
-**Variant matching — never default blindly.** Before choosing variant properties, inspect the source section for:
+#### Step A — Read the section's full context
 
-- semantic cues from name, copy, usage
-- visual cues — fills, strokes, effects, radius, typography
-- existing variant-like traits in the screen (primary vs secondary buttons, etc.)
+Before classifying, gather:
 
-If the family is right but the variant is ambiguous, call it out instead of silently using the default. The Figma component pages (Accordion, Button, etc.) document each component's available variant properties; consult them when a section's intent isn't obvious.
+1. **Layer name** + the chain of ancestor names up to the target frame. Names usually encode intent (`Task Timer Container > Task Status Container > Idle Status`).
+2. **Children:**
+   - For each child `TEXT` node: its `name`, `characters`, `fontSize`, `width`, `height`. Text content is the strongest semantic signal (`"IDLE"`, `"00:12:34"`, `"Drafting Proposals"`, `"Details"`).
+   - For each child `INSTANCE`: its `mainComponent.name`.
+   - Counts of `RECTANGLE` / `VECTOR` / `GROUP` / `FRAME` children.
+3. **Visual signature:** `cornerRadius` (bucketed: `none` 0, `xs` ≤4, `sm` ≤8, `md` ≤12, `lg` ≤16, `xl` ≤24, `full` >24), `hasStroke`, `hasFill`, `width`, `height`, `aspect ratio`.
+4. **Already-bound state:** does the section already use library instances? Are its fills/text-styles already bound to DS variables?
+
+#### Rule 1 — Existing key match (deterministic)
+
+If the section is itself an `INSTANCE` and its `mainComponent.key` exists in `component-map.json`, treat as `exact-swap`. Preserve overrides via `setProperties` after re-instantiating from the map (or `swapComponent` to repoint at the canonical Experiment-file source).
+
+#### Rule 2 — Semantic match by **systematic detection sweep** (judgment)
+
+The skill **must visit every FRAME / GROUP** under the target frame and classify by **what the node looks like**, not by what its layer name says. Layer names are hints, not gates — real product files use semantic names (`Second Task Details Container`, `Play Icon Container`, `Project and Task Container`) that don't word-match any fixed alias table but are unambiguous patterns when you look at their shape and children. **Do not pre-filter the sweep by name.** Visit every container, compute a signature, evaluate the detection table.
+
+For each non-INSTANCE FRAME / GROUP, compute:
+
+```js
+{
+  w, h, aspect: w/h,
+  radius: max corner radius,
+  hasFill, hasStroke,
+  textChildren: count of direct or near-direct TEXT descendants (capture characters, fontSize),
+  iconChildren: count of children that are ≤24×24 and either VECTOR, INSTANCE matching icon-map.json, or FRAME wrapping a single VECTOR,
+  avatarChildren: count of circular ≥24×24 children with image fill or single-letter text,
+  instanceChildren: count of existing INSTANCE descendants,
+}
+```
+
+Evaluate the **detection table** top-to-bottom. First match wins:
+
+| Signature | DS pick | Variant inference |
+| --------- | ------- | ----------------- |
+| **Circle** (radius ≥ min(w,h)/2 − 2), no text or single-letter text, image fill or initial | `Avatar` | Size by w (24/32/40/48) |
+| **Square** (aspect ≈ 1), h ∈ [24, 56], 0 text, ≥1 icon child, has fill or stroke | `Icon Button` | Size by h: ≤24→XXS, ≤32→Small, ≤40→Medium, ≤48→Large; Kind: solid fill→Primary, stroke only→Tertiary |
+| **Wide input shape**: w ≥ 150, h ∈ [28, 48], 1 text + 1 left-icon, text reads like a search placeholder ("Search…", "Find…") | `Search` | Size by h: ≤32→Medium, >32→Large |
+| **Wide input shape**: w ≥ 150, h ∈ [28, 48], 1 text, stroke present, text reads like placeholder/value; with a chevron-down icon child → `Combobox`; otherwise → `Text Field` | `Text Field` / `Combobox` | Size by h |
+| **Pill** (radius ≥ h/2 − 1, OR radius = 100), h ∈ [16, 36], 1–3 text children | `Chips` | Tone from content: "IDLE"/"Pending"→On-Warning; "Done"/"Completed"/"Working"→On-Positive; "Error"/"Failed"→On-Negative; "Lunch"/"Break"/neutral→Default. Size: h≤24→sm, ≤32→md, >32→lg. With-icon / with-avatar by child presence. |
+| **Rectangle button**: 1 text child, 0–1 icon child, h ∈ [20, 48], radius < h/2 (not a pill), has fill OR stroke | `Button` | Size by h: ≤24→XS, ≤32→Small, ≤40→Medium, ≤48→Large. Kind: solid fill + dark color→Primary; light fill + stroke→Secondary; stroke only, no fill→Tertiary. Icon position: Left if icon precedes text, Right if follows. |
+| **Row** with avatar + text + optional time/meta + optional trailing control | `List item` | Avatar=Yes if avatar child present; Right icon=Yes if trailing icon |
+| **Bare icon** (standalone VECTOR or FRAME-wrapping-single-VECTOR ≤24×24) NOT inside a button/icon-button signature | swap the VECTOR for an `icon-map.json` entry by best-match (parent-name hint, then size match) — instantiate the icon component | n/a (icon components are size-fixed) |
+| **Just text + thin shapes**, no fill/stroke, no clear affordance | _no swap_ — Rule 4 token-binding only | n/a |
+| **Bespoke graphic** (multiple VECTORs, no clear semantic) | Rule 5 annotate-and-preserve | n/a |
+
+**Always write a one-line rationale** before swapping so the report shows reasoning:
+
+```
+<Source path>  →  <DS component>  (variant: <variant>)  — because <one-line reason>
+```
+
+**Icon swap inside detected components.** When the detected component has an icon slot (Button with `Icon=Left/Right`, Icon Button's icon child, Search's left icon, Combobox's chevron), try to map the source icon's name (or its parent's name — e.g. "Play Icon Container" → `circle-play`) to an `icon-map.json` entry. If no clear match, leave the DS default and flag `⚠️ icon unspecified`.
+
+**Sweep ordering.** Process detected components **outermost-first**. Once a node is replaced by an instance, do NOT also try to match its descendants (the new instance owns them). Skip any node that lives under a replaced ancestor.
+
+**Per-instance variant selection — NEVER use one variant for a whole group.** When the sweep finds multiple candidates that match the same DS family (e.g. 44 count chips, 6 Details buttons), evaluate each instance's own signature for variant selection. Two chips in the same page can need different `Type` variants because their text content carries different semantics:
+
+- "Pending" / "Pending Tasks" / "Awaiting" → `Type=On-Warning` (yellow tone — waiting / paused)
+- "In-Progress" / "Working" / "Active" → `Type=On-Positive` (green tone — active / forward)
+- "Completed" / "Done" / "Finished" → `Type=On-Positive` (success tone)
+- "Over Due" / "Late" / "Error" / "Failed" / "Stopped" → `Type=On-Negative` (red tone — error / blocker)
+- "Lunch" / "Break" / neutral informational labels → `Type=Default`
+- Plain count badges with no semantic word → `Type=Primary` or `Type=Default`
+
+The same idea applies to **every component family**:
+
+- **Buttons** — `Kind=Primary` when source has a solid filled background with brand/strong colour; `Kind=Secondary` when has fill + stroke; `Kind=Tertiary` when stroke-only or no visual treatment. `Color=Negative` when text reads "Delete" / "Remove" / "Cancel" with red treatment.
+- **Icon Buttons** — same Kind/Color logic; size from h.
+- **Searches** — size from h; State=Default unless source shows a focus/typed state.
+- **Avatars** — size from w; placeholder vs image vs initial from fills.
+
+Pick variants **per instance**, not per group.
+
+**Variant ambiguity.** If the family is right but variant is genuinely ambiguous after applying the inference rules, instantiate the default and flag `⚠️ variant ambiguous` — do not silently pick.
+
+#### Bare-icon swap (own dedicated pass)
+
+After the component sweep finishes, run a **separate pass** for bare icons. The skill ships an `icon-map.json` with ~298 canonical icons; every leftover VECTOR or single-VECTOR-wrapping FRAME that wasn't absorbed into a component swap is a candidate.
+
+For each candidate (≤24×24 standalone VECTOR, or FRAME ≤24×24 wrapping a single VECTOR):
+
+1. **Name match.** Lowercase the source name (the FRAME's name first, then the VECTOR's name). Strip punctuation. Try direct hits against `icon-map.json` keys (`Play Icon Container` → strip suffix → match `play` → resolves to `circle-play` if present). Common parent-name suffixes to strip: `Container`, `Wrapper`, `Icon`, `Box`.
+2. **Hint match.** Many product files use semantic naming hints: `Play` → `circle-play`, `Pause` → `circle-pause`, `Close` → `xmark` / `circle-xmark` / `x-mark small`, `Logo` → leave (no DS equivalent), `Chevron` → `chevron-{up/down/left/right}`.
+3. **Sibling content.** If the icon sits inside a row whose text mentions a clear action ("Search", "Delete", "Edit"), try the matching DS icon name.
+4. **On match:** instantiate the icon component from `icon-map.json`, place it at the source's position, resize to source dimensions, then remove the source VECTOR/FRAME.
+5. **On no match:** leave the source as-is and flag `⚠️ unmatched icon: <name>` in the report. **Never** invent an icon.
+
+This pass keeps the icon library wired into the conversion outcome instead of leaving bare VECTORs everywhere.
+
+#### Rule 3 — Compose from primitives (when no single component fits)
+
+When a section is a container around multiple semantic pieces (e.g. row with avatar + name + role + action button), instantiate two or more DS primitives side-by-side and group them. Rationale line:
+
+```
+<Source path>  →  compose: <Primitive A> + <Primitive B> + ...  — because <reason>
+```
+
+Typical compositions:
+
+- Header row → `Avatar` + `Text` + `Button`
+- Timer header → `Text` (title) + `Badge` (status) + `Text` (time)
+- List row → `List item` with text overrides + optional `Tag`
+- Stat card → `Text` (label) + `Text` (number) + optional `Badge` (delta)
+
+#### Rule 4 — Token binding only (no component swap)
+
+When the section has no obvious DS component but is just text + simple shapes (e.g. a section heading, a label, a divider), do not swap. Instead **bind every value to the nearest available DS token**. The DS has what it has — never report a value as "missing from the DS" or "needs a new token." Always pick the closest existing match and move on.
+
+1. **Typography** — bind every TEXT to the nearest DS text style by fontSize + weight. Snap source `fontSize` to the closest bucket on the DS scale (32 / 24 / 18 / 16 / 14 / 12). Map source weight to the closest available style on that size (Bold / SemiBold / Medium / Regular / Light).
+2. **Colors (fills + strokes)** — bind every SOLID fill / stroke to the DS color variable whose resolved RGB is closest by Euclidean distance:
+   - First **prefer semantic tokens** when the source RGB is clearly a neutral. Build a small priority list — `primary-text-color`, `secondary-text-color`, `primary-background-color`, `ui-background-color`, `ui-border-color`, `text-color-on-primary` — and snap to the closest of those for any neutral grey/black/white source.
+   - For accent / brand / status colors that don't match a neutral, scan **all** color variables in the `Color Tokens` collection and pick the minimum-distance match.
+   - For pale fills, the `*-selected` variants (`warning-color-selected`, `positive-color-selected`, `negative-color-selected`, etc.) are usually the right family — they're the DS's pale-background palette.
+   - **Never leave a SOLID paint raw.** If a paint has no `boundVariables.color`, bind it to *something* from the DS, even if the visual is only approximate. Approximate-from-DS beats raw-but-exact every time.
+3. **Corner radii** — bind every non-zero unbound radius to the nearest `space-*` token (the DS reuses spacing tokens for radii). Snap to the closest available value (`2 / 4 / 8 / 12 / 16 / 20 / 24 / 32`). Source radii larger than 32 (pills, fully-rounded) snap to `space-32` as the largest available approximation; the visual difference is acceptable because the DS doesn't expose a pill radius.
+4. **Effects** — if a node has unbound shadows and any DS effect style exists, bind to the closest by intent (drop-shadow → `shadow-md` family). If no DS effect style applies, leave raw and note in the report.
+
+This rule applies to the **majority** of leaf elements on most product pages and is responsible for the bulk of "fonts / colors use the style, not raw values" outcomes.
+
+**Why nearest-match, not exact-match:** the user's design-system memory explicitly says *"page-to-library is substitution, not gap-flagging — skill must adapt page to existing library; never halt or ask to extend library."* The skill's job is to bring the source page into the DS as far as it goes, then stop. Source values without exact DS equivalents are not the skill's problem to flag; they are bound to the closest approximation and the run moves on.
+
+#### Rule 5 — Annotate-and-preserve (fall through)
+
+Only when Rules 1–4 all fail (truly bespoke chrome with no semantic match, e.g. custom app titlebar, marketing illustration): annotate the node with `figma_set_annotations` explaining why and leave it alone. This rule is meant to be **rare** — token binding under Rule 4 should catch nearly everything; Rule 5 only applies to nodes that aren't candidates for either a component swap or token binding (image fills, complex bespoke vectors, etc.).
+
+**Variant matching — never default blindly.** When Rule 1 or Rule 2 yields a family but the variant is genuinely ambiguous, instantiate the default, flag the section with `⚠️ variant ambiguous` in the report, and move on. The Experiment file's component pages document each component's variant properties; consult them when intent is unclear.
 
 ### 6. Decide section strategy (per section)
 
@@ -220,21 +344,25 @@ TimeWorks-specific patterns to expect:
 
 ```javascript
 // ✅ Same-file (work-in-DS-file mode): resolve by id
-(async () => {
-  const node = await figma.getNodeByIdAsync(MAP_ENTRY_ID); // from component-map.json
-  if (!node) throw new Error(`Component ${MAP_ENTRY_ID} not found in this file`);
-  const instance = node.createInstance();
-  instance.setProperties({ /* e.g. Variant: "Primary", Size: "md" */ });
-  return { instanceId: instance.id };
-})()
-
-// ✅ Cross-file (source-file mode): resolve by key
-(async () => {
-  const component = await figma.importComponentByKeyAsync(MAP_ENTRY_KEY); // from component-map.json
-  const instance = component.createInstance();
-  instance.setProperties({ /* variant overrides */ });
-  return { instanceId: instance.id };
-})()
+;(async () => {
+  const node = await figma.getNodeByIdAsync(MAP_ENTRY_ID) // from component-map.json
+  if (!node) throw new Error(`Component ${MAP_ENTRY_ID} not found in this file`)
+  const instance = node.createInstance()
+  instance.setProperties({
+    /* e.g. Variant: "Primary", Size: "md" */
+  })
+  return { instanceId: instance.id }
+})()(
+  // ✅ Cross-file (source-file mode): resolve by key
+  async () => {
+    const component = await figma.importComponentByKeyAsync(MAP_ENTRY_KEY) // from component-map.json
+    const instance = component.createInstance()
+    instance.setProperties({
+      /* variant overrides */
+    })
+    return { instanceId: instance.id }
+  }
+)()
 ```
 
 `setProperties` walks to the parent COMPONENT_SET automatically, so swapping variants from the default works without re-resolving anything.
@@ -242,12 +370,12 @@ TimeWorks-specific patterns to expect:
 Prefer `swapComponent()` when the existing node is already an instance of a compatible family and you want to preserve overrides:
 
 ```javascript
-(async () => {
-  const oldInstance = await figma.getNodeByIdAsync(INSTANCE_ID);
+;(async () => {
+  const oldInstance = await figma.getNodeByIdAsync(INSTANCE_ID)
   // Same-file: getNodeByIdAsync. Cross-file: importComponentByKeyAsync.
-  const newComponent = await figma.getNodeByIdAsync(MAP_ENTRY_ID);
-  oldInstance.swapComponent(newComponent);
-  return { success: true };
+  const newComponent = await figma.getNodeByIdAsync(MAP_ENTRY_ID)
+  oldInstance.swapComponent(newComponent)
+  return { success: true }
 })()
 ```
 
@@ -268,82 +396,144 @@ Prefer **rebuilding beside the original** when:
 **Post-swap: preserve data, let DS styling work**
 
 After creating or swapping to a DS component, **do not re-apply the old design's colors or typography**. DS components have correct styling built in. Instead:
+
 - Preserve only DATA (text content, icon references)
 - Let the new DS component define all visual styling (colors, typography, spacing)
+
+**CRITICAL — text-preservation must be bulletproof.** Setting an instance text property via `setProperties({...})` is **not enough**. The property value updates, but the bound text node inside the instance often does NOT propagate (variant binding quirks, instance overrides). Every swap must:
+
+1. **Call `setProperties` first** to update any matching text properties on the instance (Button text, Chip text, Label, Placeholder, etc.).
+2. **Read back every TEXT descendant** of the new instance and check whether its `characters` matches the source content.
+3. **If any TEXT descendant still shows the DS default** (e.g. "This is a chip", "Option 1", "Button label"), **force-override** by loading the font and setting `t.characters` directly.
+4. **Verify the final state** — re-read the text node and assert the content is right before moving on.
+
+Skipping any of these steps will leave DS placeholder strings ("This is a chip", "Option 1") in the final result.
 
 **1. Capture old state (data only, no styling):**
 
 ```javascript
 // Read the old section's data: text content and icon references only
-(async () => {
-  const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID);
-  const textMap = {};
-  const instanceHints = {};
+;(async () => {
+  const oldNode = await figma.getNodeByIdAsync(OLD_SECTION_ID)
+  const textMap = {}
+  const instanceHints = {}
 
   // Capture ONLY text content (characters), not styling
-  oldNode.findAll(n => n.type === 'TEXT').forEach(t => {
-    textMap[t.name] = t.characters; // Just the text, no fontSize/lineHeight
-  });
+  oldNode
+    .findAll((n) => n.type === "TEXT")
+    .forEach((t) => {
+      textMap[t.name] = t.characters // Just the text, no fontSize/lineHeight
+    })
 
   // Capture icon instance hints for matching to DS icons
-  oldNode.findAll(n => n.type === 'INSTANCE').forEach(inst => {
-    instanceHints[inst.name] = inst.mainComponent?.name ?? null;
-  });
+  oldNode
+    .findAll((n) => n.type === "INSTANCE")
+    .forEach((inst) => {
+      instanceHints[inst.name] = inst.mainComponent?.name ?? null
+    })
 
-  return { textMap, instanceHints };
+  return { textMap, instanceHints }
 })()
 ```
 
-**2. Apply text content only (let DS text styles work):**
+**2. Apply text content with the bulletproof two-step pattern.**
+
+Always do BOTH steps in order — never skip the verification + force-override step. `setProperties` looks like it works but silently fails for many variants; the only way to guarantee the final text is right is to write directly to the text node.
 
 ```javascript
-(async () => {
-  const textNodes = newInstance.findAll(n => n.type === 'TEXT');
+;(async () => {
+  // STEP A — set every matching text property on the instance
+  const props = newInstance.componentProperties || {}
+  const textProps = Object.entries(props).filter(([k, v]) => v.type === "TEXT")
 
-  textNodes.forEach(node => {
+  // Compute the desired combined text per logical slot. For a chip showing
+  // ["Pending", "03"] in two text nodes, joinedText is "Pending 03".
+  const sourceTexts = capturedTextMapFromOldSection // { textNodeName: characters }
+  const joinedText = Object.values(sourceTexts).join(" ").trim()
+
+  for (const [key] of textProps) {
+    try { newInstance.setProperties({ [key]: joinedText }) } catch (e) {}
+  }
+
+  // STEP B — VERIFY and force-override every TEXT descendant
+  // DS components often have one "primary" text node + decorative ones.
+  // The primary text node is the one whose characters look like a DS
+  // default ("This is a chip", "Button label", "Option 1", "Label", "Text",
+  // or any string that doesn't match the source). For each TEXT descendant,
+  // if its characters don't match our desired content, force-write.
+  const placeholder = /^(this is a chip|button label|option \d|label|text|placeholder)$/i
+  const textNodes = newInstance.findAll((n) => n.type === "TEXT")
+
+  // Heuristic: if there's exactly one text node OR exactly one matches the
+  // placeholder pattern, write joinedText there. Otherwise, attempt a name-
+  // based mapping (when the DS text node name matches a source text name).
+  const placeholders = textNodes.filter((t) => placeholder.test((t.characters || "").trim()))
+  const targets = placeholders.length > 0 ? placeholders : textNodes.length === 1 ? textNodes : []
+
+  for (const t of targets) {
     try {
-      // Restore ONLY text content, not styling
-      // Let the DS component's text style define the typography
-      const oldText = textMap[node.name];
-      if (oldText) {
-        node.characters = oldText;
+      if (typeof t.fontName === "object" && t.fontName !== figma.mixed) {
+        await figma.loadFontAsync(t.fontName)
       }
+      t.characters = joinedText
     } catch (err) {
-      console.warn(`Text content update failed for ${node.name}: ${err.message}`);
+      console.warn(`Text override failed for ${t.name}: ${err.message}`)
     }
-  });
+  }
+
+  // STEP C — assert. Re-read every text node and confirm none still match
+  // the placeholder pattern. If any do, the swap is incomplete.
+  const stillPlaceholder = newInstance.findAll(
+    (n) => n.type === "TEXT" && placeholder.test((n.characters || "").trim())
+  )
+  if (stillPlaceholder.length > 0) {
+    console.warn(`Swap left DS placeholders in ${newInstance.name}: ${stillPlaceholder.map(t => t.characters).join(", ")}`)
+  }
 })()
 ```
+
+**Multi-text components.** When the source has multiple text nodes (e.g. a list item with a primary label, secondary label, and time), map by source text node name to DS text-property name when the names line up. When they don't, use position order: source's first TEXT → DS's primary text property (`Text`, `Chip Text`, `Button text`); source's second → secondary (`Label`, `Info`, `Sub-text`). Always verify after.
 
 **3. Set icon override on button/icon components (the only hard override needed):**
 
+Load `icon-map.json` at the start of the run alongside `component-map.json`. For each Tier-1 swap whose target has an `INSTANCE_SWAP` property containing "icon", resolve the icon by name through `icon-map.json` — by id when running in the DS file, by key when running cross-file. If the name isn't in the map, log a warning and leave the DS component's default icon in place. **Never** fall back to `figma.root.findOne` — it will time out.
+
 ```javascript
-(async () => {
+;(async () => {
   try {
-    const props = newInstance.componentProperties;
-    // Find icon property (e.g., 'Icon', 'LeftIcon', 'StartIcon', etc.)
-    const iconPropKey = Object.keys(props ?? {}).find(k =>
-      k.toLowerCase().includes('icon') && props[k].type === 'INSTANCE_SWAP'
-    );
+    const props = newInstance.componentProperties
+    const iconPropKey = Object.keys(props ?? {}).find(
+      (k) => k.toLowerCase().includes("icon") && props[k].type === "INSTANCE_SWAP"
+    )
+    if (!iconPropKey || !instanceHints) return
 
-    if (!iconPropKey || !instanceHints) return;
+    // Extract icon name from the captured hint (e.g., "Icons/ChevronDown" → "ChevronDown").
+    const oldIconName = instanceHints[iconPropKey] ?? ""
+    const iconNameHint = oldIconName.split("/").pop()
+    if (!iconNameHint) return
 
-    // Extract icon name from old component (e.g., "Icons/ChevronDown")
-    const oldIconName = instanceHints[iconPropKey] ?? '';
-    const iconNameHint = oldIconName.split('/').pop(); // "ChevronDown"
-
-    if (!iconNameHint) return; // No icon hint to work with
-
-    // Icons are not in component-map.json today. If the source instance
-    // already exposes a usable icon node id via instanceHints, set it
-    // directly; otherwise leave the DS default and flag in the report.
-    const oldIconId = instanceHints[`${iconPropKey}__id`];
-    if (oldIconId) {
-      newInstance.setProperties({ [iconPropKey]: oldIconId });
+    // Resolve via icon-map.json (loaded at the start of the run alongside component-map.json).
+    // Same-file (work-in-DS-file mode): use the id.
+    // Cross-file (source-file mode): import by key.
+    const entry = iconMap[iconNameHint]
+    if (!entry) {
+      console.warn(`Icon "${iconNameHint}" not in icon-map.json; leaving DS default`)
+      return
     }
-    // Do NOT fall back to figma.root.findOne — it will time out on the DS file.
+
+    let iconNodeId
+    if (figma.fileKey === dsFileKey) {
+      const node = await figma.getNodeByIdAsync(entry.id)
+      iconNodeId = node?.id
+    } else {
+      const imported = await figma.importComponentByKeyAsync(entry.key)
+      iconNodeId = imported?.id
+    }
+    if (iconNodeId) {
+      newInstance.setProperties({ [iconPropKey]: iconNodeId })
+    }
   } catch (err) {
-    console.warn(`Icon override failed: ${err.message}`);
+    console.warn(`Icon override failed: ${err.message}`)
   }
 })()
 ```
@@ -356,12 +546,12 @@ After creating or swapping to a DS component, **do not re-apply the old design's
 
 When a section cannot be handled at Tier 1 (exact match), implement this chain. **Complete all sections; never halt.**
 
-| Tier | Strategy | Action | Report As |
-|------|----------|--------|-----------|
-| 1 | **exact-swap** | Find a single DS component that matches the section's job exactly. Swap or rebuild with a single instance. | `🔄 swapped` |
-| 2 | **compose-from-primitives** | If no single component fits, rebuild the section using 2+ DS primitives (e.g., Avatar + Text + Button). | `🔄 composed` |
-| 3 | **annotate-and-preserve** | If the library has no suitable components, keep the node as-is and attach an annotation explaining why. | `✓ annotated as-is` |
-| 4 | **flag-and-skip** | For truly bespoke or blocked nodes, leave untouched and flag in the report. | `❌ blocked: <reason>` |
+| Tier | Strategy                    | Action                                                                                                     | Report As              |
+| ---- | --------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 1    | **exact-swap**              | Find a single DS component that matches the section's job exactly. Swap or rebuild with a single instance. | `🔄 swapped`           |
+| 2    | **compose-from-primitives** | If no single component fits, rebuild the section using 2+ DS primitives (e.g., Avatar + Text + Button).    | `🔄 composed`          |
+| 3    | **annotate-and-preserve**   | If the library has no suitable components, keep the node as-is and attach an annotation explaining why.    | `✓ annotated as-is`    |
+| 4    | **flag-and-skip**           | For truly bespoke or blocked nodes, leave untouched and flag in the report.                                | `❌ blocked: <reason>` |
 
 **Error handling rule:** When Tier 1 fails, catch the error and attempt Tier 2. When Tier 2 fails or doesn't apply, fall through to Tier 3. When Tier 3 is not applicable (bespoke node), use Tier 4. Never re-throw; always record the error and proceed to the next section.
 
@@ -369,22 +559,22 @@ Example:
 
 ```javascript
 // Tier 1: Exact match?
-const exactComponent = dsComponentMap.find(c => c.name === NEEDED_COMPONENT);
+const exactComponent = dsComponentMap.find((c) => c.name === NEEDED_COMPONENT)
 if (exactComponent) {
   // Tier 1 succeeded
-  return { tier: 1, componentKey: exactComponent.key };
+  return { tier: 1, componentKey: exactComponent.key }
 }
 
 // Tier 2: Compose from primitives?
-const Icon = dsComponentMap.find(c => c.name === 'Icon');
-const Text = dsComponentMap.find(c => c.name === 'Text');
+const Icon = dsComponentMap.find((c) => c.name === "Icon")
+const Text = dsComponentMap.find((c) => c.name === "Text")
 if (Icon && Text) {
   // Tier 2 succeeded
-  return { tier: 2, primitives: ['Icon', 'Text'] };
+  return { tier: 2, primitives: ["Icon", "Text"] }
 }
 
 // Tier 3: Preserve as-is
-return { tier: 3, reason: 'No DS equivalent; preserved with annotation' };
+return { tier: 3, reason: "No DS equivalent; preserved with annotation" }
 ```
 
 ### 9. Validate what actually changed
@@ -401,6 +591,121 @@ After **the full pass**:
 - `figma_take_screenshot` of the full target.
 - `figma_set_annotations` on each section with its bucket: `🔄 swapped`, `🔄 composed`, `✓ already-connected`, or `❌ blocked: <reason>`.
 
+### 9.5. Audit for raw values
+
+One read-only `figma_execute` walk over the converted target frame. **Non-blocking** — surfaces leaks in the report; never halts the run.
+
+**A leak is** any of, inside a Tier-1 (`exact-swap`) or Tier-2 (`compose-from-primitives`) section, recursively:
+
+- A `SolidPaint` fill or stroke whose `boundVariables.color` is undefined.
+- A `cornerRadius` — or any of `topLeftRadius`, `topRightRadius`, `bottomLeftRadius`, `bottomRightRadius` — that is not bound to a variable and is not `0`.
+- A `TextNode` whose `textStyleId` is empty AND whose `fontName`, `fontSize`, and `lineHeight` are not all bound to variables. All-or-nothing on text bindings.
+- An `effects` entry on a node with empty `effectStyleId`.
+
+**Not leaks:**
+
+- Anything inside a Tier-3 (`annotate-and-preserve`) or Tier-4 (`blocked`) section.
+- Image fills and gradient fills.
+- Nodes whose name (case-insensitive substring) matches the allowlist `["Toast", "Slider", "Modal"]` — these carry intentional `rgba(...)` overlays per CLAUDE.md.
+- Descendants of newly-placed library instances — their styling resolves through the library's own bindings.
+
+**Walker pattern** (chunked at ≤200 nodes per call; cursor pattern for large frames):
+
+```javascript
+;(async () => {
+  const ALLOWLIST = ["toast", "slider", "modal"]
+  const TIER_OK = new Set(tier12SectionIds) // ids of sections classified as Tier 1 or Tier 2 in Step 6
+  const skipUnderInstance = (node) => {
+    let p = node.parent
+    while (p) {
+      if (p.type === "INSTANCE" && p.mainComponent?.remote) return true
+      p = p.parent
+    }
+    return false
+  }
+  const isAllowlisted = (node) => {
+    let p = node
+    while (p) {
+      if (ALLOWLIST.some((name) => p.name?.toLowerCase().includes(name))) return true
+      p = p.parent
+    }
+    return false
+  }
+  const isBound = (boundVariables, key) => Boolean(boundVariables?.[key])
+
+  const leaks = []
+  const visit = (node) => {
+    if (!node || skipUnderInstance(node) || isAllowlisted(node)) return
+    // Fills
+    if (Array.isArray(node.fills)) {
+      for (const paint of node.fills) {
+        if (paint.type === "SOLID" && !isBound(paint.boundVariables, "color")) {
+          leaks.push({
+            nodeId: node.id,
+            nodeName: node.name,
+            property: "fill",
+            rawValue: paint.color
+          })
+        }
+      }
+    }
+    // Strokes
+    if (Array.isArray(node.strokes)) {
+      for (const paint of node.strokes) {
+        if (paint.type === "SOLID" && !isBound(paint.boundVariables, "color")) {
+          leaks.push({
+            nodeId: node.id,
+            nodeName: node.name,
+            property: "stroke",
+            rawValue: paint.color
+          })
+        }
+      }
+    }
+    // Radii (per corner)
+    const radiusKeys = ["topLeftRadius", "topRightRadius", "bottomLeftRadius", "bottomRightRadius"]
+    for (const k of radiusKeys) {
+      const v = node[k]
+      if (typeof v === "number" && v !== 0 && !isBound(node.boundVariables, k)) {
+        leaks.push({ nodeId: node.id, nodeName: node.name, property: k, rawValue: v })
+      }
+    }
+    // Text — all-or-nothing on bindings
+    if (node.type === "TEXT" && !node.textStyleId) {
+      const bv = node.boundVariables ?? {}
+      if (!bv.fontFamily || !bv.fontSize || !bv.lineHeight) {
+        leaks.push({
+          nodeId: node.id,
+          nodeName: node.name,
+          property: "text",
+          rawValue: `${node.fontSize}/${node.lineHeight?.value ?? node.lineHeight}`
+        })
+      }
+    }
+    // Effects
+    if (Array.isArray(node.effects) && node.effects.length > 0 && !node.effectStyleId) {
+      leaks.push({
+        nodeId: node.id,
+        nodeName: node.name,
+        property: "effect",
+        rawValue: node.effects.length
+      })
+    }
+    if ("children" in node) {
+      for (const c of node.children) visit(c)
+    }
+  }
+
+  for (const sectionId of TIER_OK) {
+    const root = await figma.getNodeByIdAsync(sectionId)
+    if (root) visit(root)
+  }
+  return { leaks }
+})()
+```
+
+The returned `leaks` array feeds Step 10's report. The audit never throws; if the walker errors, surface the error in the report under `## Raw-value leaks` as `⚠️ audit failed: <message>` and continue.
+
 ### 10. Deliverable
 
 Write a markdown report at:
@@ -410,10 +715,12 @@ docs/superpowers/runs/YYYY-MM-DD-<source-file-slug>-<page-name>-conversion.md
 ```
 
 **Report accuracy rules:**
+
 - Only list a section under "Swapped" if the node is now a library instance (`mainComponent.remote === true`) OR was created fresh from a local DS component with `mainComponent.key` matching a known DS key.
 - Only list a section under "Composed" if at least one of the component instances is newly created from a DS primitive or swapped.
 - If a section has NO changes, it must appear in "Already connected" (if it was already a DS instance) or "Blocked" (if unconverted), NOT in "Swapped" or "Composed".
 - If ALL sections are blocked, open the report with `❌ No substitutions made — see Blocked section for details` before any other content.
+- The `## Raw-value leaks` section is always present. If empty, render `✓ No raw values detected.`; otherwise list every entry returned by Step 9.5. Leaks annotate their parent section line with `⚠️ raw value leak (N)` but do not change its bucket.
 
 Format:
 
@@ -439,12 +746,17 @@ Format:
 - <section name> — reason: <verbatim error or library-not-enabled> — node `<id>`
 - ...
 
+## Raw-value leaks
+
+- <nodeName> (`<nodeId>`) — <property>: <rawValue>
+- ...
+
 ## Screenshots
 
-| Stage | Source | Result |
-|---|---|---|
-| Full target | <URI> | <URI> |
-| <section name> | <URI> | <URI> |
+| Stage          | Source | Result |
+| -------------- | ------ | ------ |
+| Full target    | <URI>  | <URI>  |
+| <section name> | <URI>  | <URI>  |
 
 ## Backup
 
@@ -452,6 +764,10 @@ Backup frame: `Backup - <original name>` (node `<id>`)
 ```
 
 If nothing was actually substituted, be explicit: `❌ No substitutions made — the target was cloned but no components were upgraded. See Blocked section for details.`
+
+If the Step 9.5 walker returned an empty `leaks` array, render the section as `✓ No raw values detected.` instead of the bullet list. The section is **always present** — never omitted.
+
+For each section in `## Swapped` or `## Composed` that contained at least one leak, append ` ⚠️ raw value leak (N)` to its line (where N is the leak count for that section). The leak marker does **not** demote the section to Blocked.
 
 ## Writing rules
 
@@ -466,18 +782,18 @@ If nothing was actually substituted, be explicit: `❌ No substitutions made —
 
 ## Failure modes
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `figma_get_status` reports either file not open | DS or source not loaded in Figma Desktop | Open both in Figma Desktop and re-run |
-| "Swap component" fails with "component not found" | Component key doesn't match the target component's main component family | Verify the component key from Step 5; try a different component family |
-| `figma_execute` times out | Single call walked too many nodes | Reduce per-call budget below 200 nodes; use chunking for large frames |
-| 403 / "Invalid token" anywhere | A REST call slipped into a `figma_execute` payload | Bug — the skill should only use Plugin API (no MCP REST calls). Surface the call site and stop. |
-| `figma_execute` times out on a DS lookup | A `findOne` / `findAll` slipped into a payload | Bug — DS lookups must use `component-map.json` + `getNodeByIdAsync` / `importComponentByKeyAsync`. Surface the call site and fix. |
-| Component name not in `component-map.json` | DS added a new component since the map was generated | Halt the section, tell the user which name is missing, and ask them to add an entry. Do not fall back to `findOne`. |
-| Desktop Bridge plugin closes after one `figma_execute`; subsequent calls fail with "no active Figma instance" | A payload called `figma.closePlugin(...)` or `figma.closePluginWithFailure(...)` | Bug — payloads must `return` results and `throw` errors; never `closePlugin`. Fix the payload, restart Desktop Bridge plugin, re-run. |
-| Backup frame missing after run | Step 3 (backup creation) failed silently | Bug; check the backup creation `figma_execute` call, fix it, and re-run. |
-| All sections land in "Blocked" (no swaps or composes) | Tier 1 and 2 failed for every section; library doesn't have matching components | Expected in rare cases. Review the library composition; either add missing components or document the sections as intentionally custom. |
-| Page duplicated into DS file but skill refuses to run on it | Skill treating DS file as library-only (Step 2 check) | Ensure the page is actually copied into the DS file (fileKey should be `04x9q7W2Y59baF5MqHAVZR`). Retry. If this is a new page, re-run with `figma_navigate` to the DS file URL first. |
+| Symptom                                                                                                       | Likely cause                                                                     | Fix                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `figma_get_status` reports either file not open                                                               | DS or source not loaded in Figma Desktop                                         | Open both in Figma Desktop and re-run                                                                                                                                                  |
+| "Swap component" fails with "component not found"                                                             | Component key doesn't match the target component's main component family         | Verify the component key from Step 5; try a different component family                                                                                                                 |
+| `figma_execute` times out                                                                                     | Single call walked too many nodes                                                | Reduce per-call budget below 200 nodes; use chunking for large frames                                                                                                                  |
+| 403 / "Invalid token" anywhere                                                                                | A REST call slipped into a `figma_execute` payload                               | Bug — the skill should only use Plugin API (no MCP REST calls). Surface the call site and stop.                                                                                        |
+| `figma_execute` times out on a DS lookup                                                                      | A `findOne` / `findAll` slipped into a payload                                   | Bug — DS lookups must use `component-map.json` + `getNodeByIdAsync` / `importComponentByKeyAsync`. Surface the call site and fix.                                                      |
+| Component name not in `component-map.json`                                                                    | DS added a new component since the map was generated                             | Halt the section, tell the user which name is missing, and ask them to add an entry. Do not fall back to `findOne`.                                                                    |
+| Desktop Bridge plugin closes after one `figma_execute`; subsequent calls fail with "no active Figma instance" | A payload called `figma.closePlugin(...)` or `figma.closePluginWithFailure(...)` | Bug — payloads must `return` results and `throw` errors; never `closePlugin`. Fix the payload, restart Desktop Bridge plugin, re-run.                                                  |
+| Backup frame missing after run                                                                                | Step 3 (backup creation) failed silently                                         | Bug; check the backup creation `figma_execute` call, fix it, and re-run.                                                                                                               |
+| All sections land in "Blocked" (no swaps or composes)                                                         | Tier 1 and 2 failed for every section; library doesn't have matching components  | Expected in rare cases. Review the library composition; either add missing components or document the sections as intentionally custom.                                                |
+| Page duplicated into DS file but skill refuses to run on it                                                   | Skill treating DS file as library-only (Step 2 check)                            | Ensure the page is actually copied into the DS file (fileKey should match `dsFileKey` in `ds-config.json`). Retry. If this is a new page, re-run with `figma_navigate` to the DS file URL first. |
 
 ## When NOT to use this skill
 
