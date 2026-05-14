@@ -130,3 +130,57 @@ return { cloneId: clone.id, cloneName: clone.name };
 ```
 
 Do NOT delete the source yet — sections 6–7 still need to read from it (technically from the backup), and step 10 handles the deletion + exit gate.
+
+### 6. Identify source unique sections + confirm with user
+
+Walk the source's `main column` children. For each, compute a signature: name (lowercased), child count, dominant child type (TEXT-heavy, INSTANCE-heavy, FRAME-heavy), max child height. Compare against the template's `replaceableBodyChildren` (read from `template-config.json`).
+
+A section is "unique to source" if:
+- Its lowercased name does not match any `replaceableBodyChildren` name (case-insensitive substring) AND
+- Its signature does not closely match any template-body signature (close = same dominant child type and within 30% of dimensions).
+
+Candidate sections — typically `Frame 1707484126` (2 large cards), `Frame 1707484132` (Meetings), `Frame 1707484134` (Screenshots grid) for the canonical employees source — are presented to the user via `AskUserQuestion`:
+
+```
+Question: "Bring these N source sections into the rebuilt dashboard?"
+Header: "Bring sections"
+multiSelect: true
+options: [
+  { label: "<sectionName1> (<dimensions>)", description: "Will replace template's body content with this." },
+  ...
+]
+```
+
+If the user deselects everything, halt (no point continuing — exit-gate C1 would fail anyway).
+
+Also document which template body children will be removed (`replaceableBodyChildren`) — list them in the question's body text so the user understands the trade.
+
+### 7. Insert source unique sections
+
+For each bring-section the user confirmed:
+
+```javascript
+await figma.loadAllPagesAsync();
+const parent = await figma.getNodeByIdAsync("<bodyContainerId>"); // resolved via template-config.bodyContainerPath against the new clone
+const backupSection = await figma.getNodeByIdAsync("<sectionId in Backup - ...>"); // pick from backup, not from soon-to-be-deleted source
+const c = backupSection.clone();
+parent.appendChild(c);
+// Append order matches source's original section order
+return { insertedId: c.id, name: c.name, h: Math.round(c.height) };
+```
+
+After all bring-sections inserted, remove the template's `replaceableBodyChildren`:
+
+```javascript
+await figma.loadAllPagesAsync();
+const removeNames = ["Activity Timeline", "Bottom Containers", "Screenshots Container"]; // from template-config.replaceableBodyChildren
+const bodyContainer = await figma.getNodeByIdAsync("<bodyContainerId>");
+const removed = [];
+for (const name of removeNames) {
+  const n = bodyContainer.children.find(c => c.name === name);
+  if (n) { removed.push({ id: n.id, name: n.name }); n.remove(); }
+}
+return { removed };
+```
+
+`insertedSourceSectionCount` (used by exit-gate C1) is the count of successful inserts from this step.
