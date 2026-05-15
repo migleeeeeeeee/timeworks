@@ -9,9 +9,12 @@ pub fn run() {
                 let window = app
                     .get_webview_window("main")
                     .expect("main window not found");
+                // UnderWindowBackground matches a dark vibrancy panel well —
+                // similar to Sonoma menu bars / sidebars. Active state keeps
+                // the blur live regardless of window focus.
                 apply_vibrancy(
                     &window,
-                    NSVisualEffectMaterial::HudWindow,
+                    NSVisualEffectMaterial::UnderWindowBackground,
                     Some(NSVisualEffectState::Active),
                     Some(12.0),
                 )

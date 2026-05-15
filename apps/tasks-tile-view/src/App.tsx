@@ -53,14 +53,14 @@ export function App() {
 
   return (
     <div
-      data-theme="light"
+      data-theme="black"
       /*
-       * macOS NSVisualEffectView vibrancy is mounted under the WebView
-       * (src-tauri/src/lib.rs). A slate-tinted overlay sits on top of the
-       * blur — darker than pure white so content has more contrast while
-       * the desktop still bleeds through.
+       * Black theme over macOS vibrancy. A heavier black tint gives the dark
+       * UI proper contrast while the underlying NSVisualEffectView still
+       * blurs the desktop through. The rounded outer container + overflow
+       * hidden gives the window soft 12px corners under decorations:false.
        */
-      className="relative flex h-screen flex-col overflow-hidden bg-slate-900/15"
+      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/55"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
