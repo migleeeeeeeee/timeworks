@@ -60,7 +60,7 @@ export function App() {
        * blurs the desktop through. The rounded outer container + overflow
        * hidden gives the window soft 12px corners under decorations:false.
        */
-      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/55"
+      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/25"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
