@@ -151,22 +151,23 @@ export function TaskTile({ task, onClick, compact }: Props) {
           <Chip
             size="sm"
             type="positive"
-            icon="chevron-down"
-            iconPosition="right"
-            className="self-start font-semibold"
-            // Hardcoded Figma "Subtle" colors — DS positive tokens flip dark
-            // in black mode, which doesn't match the Figma's pastel chips.
-            // Overriding --color-icon-color via inline style tints the
-            // trailing chevron to match the label.
-            style={
-              {
-                backgroundColor: chip.bg,
-                color: chip.fg,
-                "--color-icon-color": chip.fg,
-              } as React.CSSProperties
-            }
+            className="self-start"
+            // Hardcoded Figma 'Positive-Subtle' colors — DS positive tokens
+            // flip dark-saturated in black mode, which doesn't match the
+            // pastel chip in the Tasks tile view Figma frame. Setting color
+            // directly cascades to the inline SVG chevron via currentColor.
+            style={{ backgroundColor: chip.bg, color: chip.fg }}
           >
             {chip.label}
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </Chip>
         </div>
       </div>
