@@ -1,3 +1,5 @@
+import { useEffect } from "react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import { useAppState } from "./state/AppState"
 import { TopBar } from "./components/TopBar"
 import { Sidebar } from "./components/Sidebar"
@@ -5,7 +7,43 @@ import { MainContent } from "./components/MainContent"
 import { TaskDetailModal } from "./components/TaskDetailModal"
 import { projects, tasks as allTasks } from "./data/mock"
 
+/**
+ * Document-level mousedown listener that drives window dragging. Tauri 2's
+ * auto-injected `data-tauri-drag-region` handler can fail to bind in dev
+ * mode (HMR remounts, transparent windows + WebKit). Registering manually
+ * at the document level survives every remount and bypasses React's
+ * synthetic event chain.
+ */
+function useWindowDrag() {
+  useEffect(() => {
+    const win = getCurrentWindow()
+    function onMouseDown(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      // Only when the click landed inside an explicit drag region.
+      if (!target.closest("[data-tauri-drag-region]")) return
+      // Don't hijack clicks on interactive controls inside the drag region.
+      if (target.closest("button, input, a, [role='tab'], [role='button']")) return
+      e.preventDefault()
+      void win.startDragging()
+    }
+    function onDoubleClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      if (!target?.closest("[data-tauri-drag-region]")) return
+      if (target.closest("button, input, a, [role='tab'], [role='button']")) return
+      void win.toggleMaximize()
+    }
+    document.addEventListener("mousedown", onMouseDown)
+    document.addEventListener("dblclick", onDoubleClick)
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown)
+      document.removeEventListener("dblclick", onDoubleClick)
+    }
+  }, [])
+}
+
 export function App() {
+  useWindowDrag()
   const s = useAppState()
   const currentTask =
     allTasks.find((t) => t.id === s.timer.currentTaskId) ?? allTasks[0]!
@@ -17,12 +55,12 @@ export function App() {
     <div
       data-theme="light"
       /*
-       * No solid bg here — macOS NSVisualEffectView vibrancy is mounted under
-       * the WebView (see src-tauri/src/lib.rs). A faint translucent tint via
-       * bg-white/40 gives the design a touch of warmth on top of the blur,
-       * while still letting the desktop show through.
+       * macOS NSVisualEffectView vibrancy is mounted under the WebView
+       * (src-tauri/src/lib.rs). A slate-tinted overlay sits on top of the
+       * blur — darker than pure white so content has more contrast while
+       * the desktop still bleeds through.
        */
-      className="relative flex h-screen flex-col overflow-hidden bg-white/40"
+      className="relative flex h-screen flex-col overflow-hidden bg-slate-900/15"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
