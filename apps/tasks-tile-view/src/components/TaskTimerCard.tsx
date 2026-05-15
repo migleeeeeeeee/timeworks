@@ -37,7 +37,8 @@ export function TaskTimerCard({ task, timer, onToggle }: Props) {
         </button>
         <div className="flex flex-1 flex-col leading-tight">
           <span
-            className="font-mono text-[26px] font-semibold tracking-tight text-[var(--color-primary-text-color)]"
+            className="text-[28px] font-bold leading-none tabular-nums tracking-tight text-[var(--color-primary-text-color)]"
+            style={{ fontFamily: "var(--font-body)" }}
             aria-live="polite"
           >
             {formatElapsed(timer.elapsedSeconds)}

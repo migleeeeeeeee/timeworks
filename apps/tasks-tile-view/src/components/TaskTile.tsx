@@ -71,13 +71,20 @@ export function TaskTile({ task, onClick, compact }: Props) {
       {/* Title row */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <IconButton
-            size="xs"
-            kind="primary"
-            icon="circle-play"
+          <span
+            role="button"
+            tabIndex={0}
             aria-label={`Start ${task.title}`}
             onClick={(e) => e.stopPropagation()}
-          />
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") e.stopPropagation()
+            }}
+            className="flex size-6 shrink-0 items-center justify-center rounded-[6px] bg-[var(--color-primary-color)] text-[var(--color-text-color-on-primary)] hover:bg-[var(--color-primary-hover-color)]"
+          >
+            <svg width="10" height="11" viewBox="0 0 10 11" aria-hidden="true">
+              <polygon points="1.5,1 9,5.5 1.5,10" fill="currentColor" />
+            </svg>
+          </span>
           <span className="truncate text-t2 font-semibold text-[var(--color-primary-text-color)]">
             {task.title}
           </span>
@@ -153,7 +160,16 @@ export function TaskTile({ task, onClick, compact }: Props) {
             icon="chevron-down"
             iconPosition="right"
             className="font-semibold"
-            style={{ color: chip.textColor }}
+            // Override both the chip's text color and the icon-color CSS var
+            // so the chevron tints to match the label (DS Chip hard-codes its
+            // icon to var(--color-icon-color); overriding the var at the
+            // chip element level retargets just that icon).
+            style={
+              {
+                color: chip.textColor,
+                "--color-icon-color": chip.textColor,
+              } as React.CSSProperties
+            }
           >
             {chip.label}
           </Chip>
