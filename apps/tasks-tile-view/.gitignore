@@ -2,3 +2,9 @@ node_modules
 dist
 .DS_Store
 src-tauri/target
+
+# TypeScript build artifacts — project references (tsconfig.node.json's
+# composite:true) emit these alongside source. Vite is the real builder.
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
