@@ -29,6 +29,11 @@ export function ProjectsCard({
         value={searchQuery}
         onValueChange={onSearchChange}
         placeholder="Find a task or project"
+        // DS Search defaults to --color-secondary-background-color which is 8%
+        // white in black mode — invisible against our vibrancy window. Tint it
+        // to a stronger translucent white pill and drop the border so it reads
+        // like the Figma's frosted Search.
+        wrapperClassName="!bg-white/10 !border-white/10"
       />
       <ul className="flex flex-col gap-1 overflow-y-auto">
         {projects.map((p) => (
