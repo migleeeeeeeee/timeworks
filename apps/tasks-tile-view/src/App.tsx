@@ -72,12 +72,12 @@ export function App() {
     <div
       data-theme="black"
       /*
-       * Black theme over macOS vibrancy. A heavier black tint gives the dark
-       * UI proper contrast while the underlying NSVisualEffectView still
-       * blurs the desktop through. The rounded outer container + overflow
-       * hidden gives the window soft 12px corners under decorations:false.
+       * Saturated purple/violet diagonal gradient backdrop matching the
+       * Figma. Sits on top of macOS NSVisualEffectView vibrancy so the
+       * blur still bleeds through at the edges, but the overall look is
+       * the brand purple gradient, not a window over desktop.
        */
-      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/35"
+      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1232]/95 via-[#3a205c]/90 to-[#0e0a24]/95"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
@@ -113,16 +113,16 @@ function BackgroundBlobs() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden opacity-15"
+      className="pointer-events-none absolute inset-0 overflow-hidden opacity-60"
     >
-      {/* top-left: brand selected hover — light violet */}
-      <div className="absolute -left-32 -top-32 h-[440px] w-[440px] rounded-full bg-[var(--color-brand-selected-hover-color)] blur-3xl" />
-      {/* top-right: purple */}
-      <div className="absolute right-[-120px] top-[80px] h-[380px] w-[380px] rounded-full bg-[var(--color-purple)] blur-3xl" />
-      {/* bottom-center: dark indigo selected */}
-      <div className="absolute bottom-[-80px] left-[300px] h-[420px] w-[420px] rounded-full bg-[var(--color-dark_indigo-selected)] blur-3xl" />
-      {/* bottom-right: dark purple */}
-      <div className="absolute -right-24 bottom-[-100px] h-[360px] w-[360px] rounded-full bg-[var(--color-dark_purple)] blur-3xl" />
+      {/* top-left: light violet glow near the timer card */}
+      <div className="absolute -left-32 -top-32 h-[440px] w-[440px] rounded-full bg-[#a78bfa] blur-3xl" />
+      {/* top-right: brighter magenta-violet */}
+      <div className="absolute right-[-120px] top-[80px] h-[380px] w-[380px] rounded-full bg-[#8b5cf6] blur-3xl" />
+      {/* bottom-center: rich indigo */}
+      <div className="absolute bottom-[-80px] left-[300px] h-[420px] w-[420px] rounded-full bg-[#5b21b6] blur-3xl" />
+      {/* bottom-right: deep purple */}
+      <div className="absolute -right-24 bottom-[-100px] h-[360px] w-[360px] rounded-full bg-[#7c3aed] blur-3xl" />
     </div>
   )
 }
