@@ -15,8 +15,8 @@ export function ProjectListItem({ project, selected, onClick }: Props) {
       onClick={onClick}
       className={cn(
         "flex w-full items-center gap-3 rounded-[35px] px-3 py-[10px]",
-        "border border-[var(--color-layout-border-color)]/[0.18]",
-        "bg-[var(--color-secondary-background-color)]/50",
+        "border border-[var(--color-layout-border-color)]",
+        "bg-[var(--color-secondary-background-color)]",
         "text-left transition-colors",
         "hover:bg-[var(--color-secondary-background-color)]",
         "focus-visible:outline-2 focus-visible:outline-[var(--color-primary-color)]",
