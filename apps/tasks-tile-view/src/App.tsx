@@ -71,13 +71,9 @@ export function App() {
   return (
     <div
       data-theme="black"
-      /*
-       * Saturated purple/violet diagonal gradient backdrop matching the
-       * Figma. Sits on top of macOS NSVisualEffectView vibrancy so the
-       * blur still bleeds through at the edges, but the overall look is
-       * the brand purple gradient, not a window over desktop.
-       */
-      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-gradient-to-br from-[#1a1232]/95 via-[#3a205c]/90 to-[#0e0a24]/95"
+      // Frosted-glass: black tint at 35% over the macOS NSVisualEffectView
+      // vibrancy. Lets the desktop blur bleed through evenly.
+      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/35"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
@@ -113,7 +109,7 @@ function BackgroundBlobs() {
   return (
     <div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 overflow-hidden opacity-60"
+      className="pointer-events-none absolute inset-0 overflow-hidden opacity-20"
     >
       {/* top-left: light violet glow near the timer card */}
       <div className="absolute -left-32 -top-32 h-[440px] w-[440px] rounded-full bg-[#a78bfa] blur-3xl" />

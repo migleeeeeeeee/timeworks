@@ -2,7 +2,6 @@ import { IconButton } from "@ds/components/IconButton"
 import { LinearProgressBar } from "@ds/components/LinearProgressBar"
 import { Avatar } from "@ds/components/Avatar"
 import { AvatarGroup } from "@ds/components/AvatarGroup"
-import { Chip } from "@ds/components/Chip"
 import { cn } from "@ds/lib/cn"
 import type { Task, TaskStatus } from "../types"
 
@@ -13,40 +12,34 @@ type Props = {
 }
 
 /**
- * The DS Chip uses its tone's *background* color (e.g. positive-color-selected
- * = light green) but always renders text in primary-text-color. The Figma
- * "Positive-Subtle" / "Negative-Subtle" chips pair the tinted background with
- * a matching-hue dark text (Green-text-on-primary, Red-text-on-primary, etc.),
- * which gives them their characteristic look. We achieve that by overriding
- * the text color via className.
+ * Status chip palette — hard-coded to the Figma "Subtle" tones so the chip
+ * renders the same in every theme (the DS positive-color token flips dark in
+ * black mode, which we don't want). Values lifted from the Figma light-mode
+ * variables.css block.
  */
 const statusToChip: Record<
   TaskStatus,
-  {
-    label: string
-    type: "primary" | "positive" | "negative" | "warning"
-    textColor: string
-  }
+  { label: string; bg: string; fg: string }
 > = {
   open: {
     label: "Open",
-    type: "primary",
-    textColor: "var(--color-primary-color)",
+    bg: "#eee9ff",
+    fg: "#5b3df5",
   },
   in_progress: {
     label: "In-Progress",
-    type: "positive",
-    textColor: "var(--color-Green-text-on-primary)",
+    bg: "#e8f4e6",
+    fg: "#007d5d",
   },
   blocked: {
     label: "Blocked",
-    type: "negative",
-    textColor: "var(--color-red-text-on-primary)",
+    bg: "#ffe5e7",
+    fg: "#c20114",
   },
   done: {
     label: "Done",
-    type: "positive",
-    textColor: "var(--color-Green-text-on-primary)",
+    bg: "#e8f4e6",
+    fg: "#007d5d",
   },
 }
 
@@ -154,25 +147,21 @@ export function TaskTile({ task, onClick, compact }: Props) {
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <span className="text-[var(--color-secondary-text-color)]">Status</span>
-          <Chip
-            size="sm"
-            type={chip.type}
-            icon="chevron-down"
-            iconPosition="right"
-            className="font-semibold"
-            // Override both the chip's text color and the icon-color CSS var
-            // so the chevron tints to match the label (DS Chip hard-codes its
-            // icon to var(--color-icon-color); overriding the var at the
-            // chip element level retargets just that icon).
-            style={
-              {
-                color: chip.textColor,
-                "--color-icon-color": chip.textColor,
-              } as React.CSSProperties
-            }
+          <span
+            className="inline-flex h-6 w-fit items-center gap-1 self-start rounded-md px-2 text-t3 font-semibold"
+            style={{ backgroundColor: chip.bg, color: chip.fg }}
           >
             {chip.label}
-          </Chip>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
         </div>
       </div>
     </button>

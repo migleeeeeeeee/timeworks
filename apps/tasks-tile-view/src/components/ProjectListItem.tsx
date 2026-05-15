@@ -14,27 +14,25 @@ export function ProjectListItem({ project, selected, onClick }: Props) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-3 rounded-[35px] px-3 py-[10px]",
-        "border border-[var(--color-layout-border-color)]",
-        "bg-white/10",
+        "flex w-full items-center gap-2 rounded-full px-3 py-1.5",
+        "border border-white/10 bg-white/5",
         "text-left transition-colors",
         "hover:bg-white/10",
         "focus-visible:outline-2 focus-visible:outline-[var(--color-primary-color)]",
-        selected &&
-          "border-[var(--color-primary-color)] bg-white/10",
+        selected && "border-[var(--color-primary-color)] bg-white/10",
       )}
     >
-      <span className="flex flex-1 items-center gap-3">
-        <span className="flex-1 text-t1 font-semibold text-[var(--color-primary-text-color)]">
+      <span className="flex flex-1 items-center gap-2">
+        <span className="flex-1 truncate text-t2 font-semibold text-[var(--color-primary-text-color)]">
           {project.name}
         </span>
-        <span className="text-t2 font-semibold text-[var(--color-secondary-text-color)]">
+        <span className="text-t3 font-medium text-[var(--color-secondary-text-color)]">
           {project.timeSpent}
         </span>
       </span>
       {/* stopPropagation prevents the expand click from toggling row selection */}
       <IconButton
-        size="sm"
+        size="xs"
         kind="tertiary"
         icon="chevron-down"
         aria-label={`Expand ${project.name}`}
