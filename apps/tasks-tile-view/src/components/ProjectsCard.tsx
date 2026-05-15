@@ -18,7 +18,7 @@ export function ProjectsCard({
   onSelectProject,
 }: Props) {
   return (
-    <section className="flex flex-1 flex-col gap-4 rounded-2xl border border-[var(--color-layout-border-color)] bg-[var(--color-secondary-background-color)] p-4">
+    <section className="flex flex-1 flex-col gap-4 rounded-2xl border border-[var(--color-layout-border-color)] bg-white/10 p-4 backdrop-blur-xl">
       <header>
         <h2 className="text-t1 font-semibold text-[var(--color-primary-text-color)]">Today</h2>
       </header>

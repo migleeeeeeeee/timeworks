@@ -21,7 +21,7 @@ type Props = {
  */
 export function TaskTimerCard({ task, timer, onToggle }: Props) {
   return (
-    <section className="relative rounded-2xl bg-[var(--color-secondary-background-color)] p-4">
+    <section className="relative rounded-2xl bg-white/10 p-4 backdrop-blur-xl">
       <SweepBorder running={timer.isRunning} />
 
       <div className="relative flex items-center gap-4">

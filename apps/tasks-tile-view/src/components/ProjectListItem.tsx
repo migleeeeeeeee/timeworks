@@ -16,12 +16,12 @@ export function ProjectListItem({ project, selected, onClick }: Props) {
       className={cn(
         "flex w-full items-center gap-3 rounded-[35px] px-3 py-[10px]",
         "border border-[var(--color-layout-border-color)]",
-        "bg-[var(--color-secondary-background-color)]",
+        "bg-white/10",
         "text-left transition-colors",
-        "hover:bg-[var(--color-secondary-background-color)]",
+        "hover:bg-white/10",
         "focus-visible:outline-2 focus-visible:outline-[var(--color-primary-color)]",
         selected &&
-          "border-[var(--color-primary-color)] bg-[var(--color-secondary-background-color)]",
+          "border-[var(--color-primary-color)] bg-white/10",
       )}
     >
       <span className="flex flex-1 items-center gap-3">

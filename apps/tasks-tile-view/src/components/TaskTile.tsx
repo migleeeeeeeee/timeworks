@@ -62,7 +62,7 @@ export function TaskTile({ task, onClick, compact }: Props) {
       type="button"
       onClick={onClick}
       className={cn(
-        "flex flex-col gap-3 rounded-2xl border border-[var(--color-layout-border-color)] bg-[var(--color-secondary-background-color)] p-3 text-left",
+        "flex flex-col gap-3 rounded-2xl border border-[var(--color-layout-border-color)] bg-white/10 p-3 text-left backdrop-blur-xl",
         "transition-shadow hover:shadow-md",
         "focus-visible:outline-2 focus-visible:outline-[var(--color-primary-color)]",
         compact ? "min-h-[200px]" : "min-h-[269px]",
