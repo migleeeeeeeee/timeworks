@@ -2,6 +2,7 @@ import { IconButton } from "@ds/components/IconButton"
 import { LinearProgressBar } from "@ds/components/LinearProgressBar"
 import { Avatar } from "@ds/components/Avatar"
 import { AvatarGroup } from "@ds/components/AvatarGroup"
+import { Chip } from "@ds/components/Chip"
 import { cn } from "@ds/lib/cn"
 import type { Task, TaskStatus } from "../types"
 
@@ -147,21 +148,26 @@ export function TaskTile({ task, onClick, compact }: Props) {
         </div>
         <div className="flex flex-1 flex-col gap-1">
           <span className="text-[var(--color-secondary-text-color)]">Status</span>
-          <span
-            className="inline-flex h-6 w-fit items-center gap-1 self-start rounded-md px-2 text-t3 font-semibold"
-            style={{ backgroundColor: chip.bg, color: chip.fg }}
+          <Chip
+            size="sm"
+            type="positive"
+            icon="chevron-down"
+            iconPosition="right"
+            className="self-start font-semibold"
+            // Hardcoded Figma "Subtle" colors — DS positive tokens flip dark
+            // in black mode, which doesn't match the Figma's pastel chips.
+            // Overriding --color-icon-color via inline style tints the
+            // trailing chevron to match the label.
+            style={
+              {
+                backgroundColor: chip.bg,
+                color: chip.fg,
+                "--color-icon-color": chip.fg,
+              } as React.CSSProperties
+            }
           >
             {chip.label}
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M6 9l6 6 6-6"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </span>
+          </Chip>
         </div>
       </div>
     </button>
