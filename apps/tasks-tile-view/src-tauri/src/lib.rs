@@ -9,16 +9,18 @@ pub fn run() {
                 let window = app
                     .get_webview_window("main")
                     .expect("main window not found");
-                // UnderWindowBackground matches a dark vibrancy panel well —
-                // similar to Sonoma menu bars / sidebars. Active state keeps
-                // the blur live regardless of window focus.
-                apply_vibrancy(
+                println!("[vibrancy] applying NSVisualEffectMaterial::HudWindow");
+                // HudWindow gives a noticeably dark frosted look on Sonoma/
+                // Sequoia. Active state keeps the blur on regardless of focus.
+                match apply_vibrancy(
                     &window,
-                    NSVisualEffectMaterial::UnderWindowBackground,
+                    NSVisualEffectMaterial::HudWindow,
                     Some(NSVisualEffectState::Active),
                     Some(12.0),
-                )
-                .expect("Failed to apply macOS vibrancy effect");
+                ) {
+                    Ok(_) => println!("[vibrancy] apply_vibrancy OK"),
+                    Err(e) => eprintln!("[vibrancy] apply_vibrancy FAILED: {:?}", e),
+                }
             }
             Ok(())
         })

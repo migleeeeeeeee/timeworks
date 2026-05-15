@@ -17,22 +17,39 @@ import { projects, tasks as allTasks } from "./data/mock"
 function useWindowDrag() {
   useEffect(() => {
     const win = getCurrentWindow()
-    function onMouseDown(e: MouseEvent) {
+    console.log("[drag] handler attached, win =", win)
+
+    function isDragTarget(target: HTMLElement | null) {
+      if (!target) return false
+      if (!target.closest("[data-tauri-drag-region]")) return false
+      if (target.closest("button, input, a, [role='tab'], [role='button']"))
+        return false
+      return true
+    }
+
+    async function onMouseDown(e: MouseEvent) {
       const target = e.target as HTMLElement | null
-      if (!target) return
-      // Only when the click landed inside an explicit drag region.
-      if (!target.closest("[data-tauri-drag-region]")) return
-      // Don't hijack clicks on interactive controls inside the drag region.
-      if (target.closest("button, input, a, [role='tab'], [role='button']")) return
+      if (!isDragTarget(target)) return
+      console.log("[drag] mousedown in drag region — calling startDragging()")
       e.preventDefault()
-      void win.startDragging()
+      try {
+        await win.startDragging()
+        console.log("[drag] startDragging() resolved")
+      } catch (err) {
+        console.error("[drag] startDragging() rejected:", err)
+      }
     }
-    function onDoubleClick(e: MouseEvent) {
+
+    async function onDoubleClick(e: MouseEvent) {
       const target = e.target as HTMLElement | null
-      if (!target?.closest("[data-tauri-drag-region]")) return
-      if (target.closest("button, input, a, [role='tab'], [role='button']")) return
-      void win.toggleMaximize()
+      if (!isDragTarget(target)) return
+      try {
+        await win.toggleMaximize()
+      } catch (err) {
+        console.error("[drag] toggleMaximize() rejected:", err)
+      }
     }
+
     document.addEventListener("mousedown", onMouseDown)
     document.addEventListener("dblclick", onDoubleClick)
     return () => {
@@ -60,7 +77,7 @@ export function App() {
        * blurs the desktop through. The rounded outer container + overflow
        * hidden gives the window soft 12px corners under decorations:false.
        */
-      className="relative flex h-screen flex-col overflow-hidden rounded-xl bg-black/25"
+      className="relative flex h-screen flex-col overflow-hidden rounded-xl"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">
