@@ -1,0 +1,28 @@
+/*
+ * App entry CSS. Imports Tailwind v4 + the DS token theme so all
+ * --color-*, --space-*, --shadow-*, --text-* CSS variables resolve.
+ * Mirrors src/index.css at the repo root; do not invent new tokens here.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Karla:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "../../../src/tokens/dist/css/variables.css";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font-body);
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
