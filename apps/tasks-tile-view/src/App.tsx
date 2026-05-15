@@ -16,7 +16,13 @@ export function App() {
   return (
     <div
       data-theme="light"
-      className="relative flex h-screen flex-col overflow-hidden bg-[var(--color-primary-background-color)]"
+      /*
+       * No solid bg here — macOS NSVisualEffectView vibrancy is mounted under
+       * the WebView (see src-tauri/src/lib.rs). A faint translucent tint via
+       * bg-white/40 gives the design a touch of warmth on top of the blur,
+       * while still letting the desktop show through.
+       */
+      className="relative flex h-screen flex-col overflow-hidden bg-white/40"
     >
       <BackgroundBlobs />
       <div className="relative z-10 flex h-full flex-col">

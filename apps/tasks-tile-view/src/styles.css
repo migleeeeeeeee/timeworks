@@ -26,7 +26,19 @@ body,
   height: 100%;
   margin: 0;
   font-family: var(--font-body);
+  /*
+   * `transparent` is critical: on macOS, the Tauri window is `transparent: true`
+   * and an NSVisualEffectView is mounted underneath the WebView. The vibrancy
+   * blur shows through any non-opaque CSS background. If we set an opaque page
+   * color here the frosted-glass effect would be hidden.
+   */
   background: transparent;
+}
+
+html,
+body {
+  /* Forbid any browser-default opaque background on macOS WebKit. */
+  background-color: transparent !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

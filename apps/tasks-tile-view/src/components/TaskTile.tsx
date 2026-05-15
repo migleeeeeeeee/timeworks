@@ -12,14 +12,42 @@ type Props = {
   compact?: boolean
 }
 
+/**
+ * The DS Chip uses its tone's *background* color (e.g. positive-color-selected
+ * = light green) but always renders text in primary-text-color. The Figma
+ * "Positive-Subtle" / "Negative-Subtle" chips pair the tinted background with
+ * a matching-hue dark text (Green-text-on-primary, Red-text-on-primary, etc.),
+ * which gives them their characteristic look. We achieve that by overriding
+ * the text color via className.
+ */
 const statusToChip: Record<
   TaskStatus,
-  { label: string; type: "primary" | "positive" | "negative" | "warning" }
+  {
+    label: string
+    type: "primary" | "positive" | "negative" | "warning"
+    textColor: string
+  }
 > = {
-  open: { label: "Open", type: "primary" },
-  in_progress: { label: "In-Progress", type: "positive" },
-  blocked: { label: "Blocked", type: "negative" },
-  done: { label: "Done", type: "positive" },
+  open: {
+    label: "Open",
+    type: "primary",
+    textColor: "var(--color-primary-color)",
+  },
+  in_progress: {
+    label: "In-Progress",
+    type: "positive",
+    textColor: "var(--color-Green-text-on-primary)",
+  },
+  blocked: {
+    label: "Blocked",
+    type: "negative",
+    textColor: "var(--color-red-text-on-primary)",
+  },
+  done: {
+    label: "Done",
+    type: "positive",
+    textColor: "var(--color-Green-text-on-primary)",
+  },
 }
 
 export function TaskTile({ task, onClick, compact }: Props) {
@@ -124,6 +152,8 @@ export function TaskTile({ task, onClick, compact }: Props) {
             type={chip.type}
             icon="chevron-down"
             iconPosition="right"
+            className="font-semibold"
+            style={{ color: chip.textColor }}
           >
             {chip.label}
           </Chip>

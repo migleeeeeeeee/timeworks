@@ -17,7 +17,7 @@ export function TopBar({ view, onViewChange }: Props) {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[44px] items-center justify-between pl-28 pr-6"
+      className="flex h-[44px] items-center pl-28 pr-6"
     >
       <Tabs value={view} onValueChange={(v) => onViewChange(v as View)}>
         <TabsList>
@@ -25,6 +25,13 @@ export function TopBar({ view, onViewChange }: Props) {
           <TabsTrigger value="chatworks">ChatWorks</TabsTrigger>
         </TabsList>
       </Tabs>
+      {/*
+       * Wide drag handle between the tabs and the avatar — flex-1 so any empty
+       * space at the top is grab-to-move. data-tauri-drag-region on this child
+       * AND the parent ensures the window moves regardless of where the user
+       * mouses down in the inert middle band.
+       */}
+      <div data-tauri-drag-region className="flex-1 self-stretch" />
       <Avatar
         type="img"
         size="md"
