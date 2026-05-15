@@ -17,7 +17,7 @@ export function TopBar({ view, onViewChange }: Props) {
   return (
     <div
       data-tauri-drag-region
-      className="flex h-[44px] items-center justify-between pl-20 pr-6"
+      className="flex h-[44px] items-center justify-between pl-28 pr-6"
     >
       <Tabs value={view} onValueChange={(v) => onViewChange(v as View)}>
         <TabsList>
