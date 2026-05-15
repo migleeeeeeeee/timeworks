@@ -24,5 +24,12 @@
     }
   },
   "include": ["src", "../../src"],
+  "exclude": [
+    "../../src/**/*.test.ts",
+    "../../src/**/*.test.tsx",
+    "../../src/**/*.stories.tsx",
+    "../../src/**/*.stories.ts",
+    "../../vitest.setup.ts"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
