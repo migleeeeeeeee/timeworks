@@ -6,6 +6,18 @@
 
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Karla:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
+
+/*
+ * Tell Tailwind v4 to scan the DS component source. By default the Vite
+ * plugin only auto-scans files inside this app's root, so DS classes like
+ * `h-4`, `rounded-full`, `border`, sizing, etc. never get emitted without
+ * these @source directives. Without them, Avatar/Icon/Chip/Search/Tabs and
+ * every other DS component renders as unstyled DOM.
+ */
+@source "../../../src/components/**/*.{ts,tsx}";
+@source "../../../src/lib/**/*.{ts,tsx}";
+@source "../../../src/icons/**/*.{ts,tsx}";
+
 @import "../../../src/tokens/dist/css/variables.css";
 
 html,
