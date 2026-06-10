@@ -38,7 +38,8 @@ Every new variant reuses the existing card structure — big circle button (left
   - Time digits: static, muted (text-secondary token) — no active styling, no blue border.
   - Caption line: restriction message in `t3` muted text. Disabled and limit-reached states carry a leading 16px icon (lock / clock) from the canonical icon library (node `25336:96509`); shift states are text-only. Messages wrap to two lines; card height grows to ~180px where needed.
 - **In-progress states** (Daily Limit, Weekly Limit, Shift Active):
-  - Identical to `State=Active` (running time, task name, blue-border card, pause button). The limit/shift indicator is a **counter chip** in the chips row replacing the Break chip: the Active chip hugs its content and the counter chip fills the rest (clock icon + text for limits, text-only for shift). Revised 2026-06-10 — the original bottom caption line was rejected in review. Card height stays 146.
+  - Resting card is **identical to `State=Active`** — running time, task name, blue-border card, pause button, and the full `Active` + `Break` chips row. The only addition is a small muted clock icon beside the timer digits (`Hover Indicator`), acting as the hover affordance.
+  - The limit/shift counter is **hover-only**: hovering the clock icon reveals a tooltip with the counter text. The tooltip is not drawn on the variant; a Figma annotation on each variant documents the hover behavior and the exact counter copy. Revised 2026-06-10 — earlier bottom-caption and counter-chip-replacing-Break treatments were both rejected in review. Card height 146.
 - **Chips:** existing Chip pattern. Neutral hue for admin/shift states, warning hue (Content Color hue tokens) for limit-reached. No new tokens; every fill/stroke/text binds to existing Figma variables.
 
 ## 3. The 8 variants
@@ -46,12 +47,12 @@ Every new variant reuses the existing card structure — big circle button (left
 | Variant name | Button | Time | Caption line | Chips / extra caption |
 | --- | --- | --- | --- | --- |
 | `State=Disabled` | disabled | `00:00:00` muted | 🔒 "Time tracking has been disabled for your account." | `Disabled` (neutral) |
-| `State=Daily Limit` | pause (active) | running `06:30:12` | "EverTech Drafting Proposals" | `Active` + counter chip: 🕐 "6h 30m / 8h today" |
+| `State=Daily Limit` | pause (active) | running `06:30:12` + clock affordance | "EverTech Drafting Proposals" | `Active` + `Break` (hover clock → tooltip "6h 30m / 8h today") |
 | `State=Daily Limit Reached` | disabled | `08:00:00` muted | 🕐 "You've reached your daily time limit (8h). Tracking will resume tomorrow." | `Limit reached` (warning) |
-| `State=Weekly Limit` | pause (active) | running | "EverTech Drafting Proposals" | `Active` + counter chip: 🕐 "32h 15m / 40h this week" |
+| `State=Weekly Limit` | pause (active) | running + clock affordance | "EverTech Drafting Proposals" | `Active` + `Break` (hover clock → tooltip "32h 15m / 40h this week") |
 | `State=Weekly Limit Reached` | disabled | muted | 🕐 "You've reached your weekly time limit (40h). Tracking will resume next week." | `Weekly limit reached` (warning) |
 | `State=Shift Upcoming` | disabled | `00:00:00` muted | "Your shift hasn't started yet. You can track time starting at 9:00 AM." | `Shift · 9:00 AM – 5:00 PM` (neutral) |
-| `State=Shift Active` | pause (active) | running | "EverTech Drafting Proposals" | `Active` + counter chip: "Shift · 2h 30m left" (text-only) |
+| `State=Shift Active` | pause (active) | running + clock affordance | "EverTech Drafting Proposals" | `Active` + `Break` (hover clock → tooltip "Shift: 9:00 AM – 5:00 PM · 2h 30m left") |
 | `State=Shift Ended` | disabled | muted (last tracked total) | "Your shift has ended. Time tracking is no longer available until your next shift." | `Shift ended` (neutral) |
 
 Icons: lock for Disabled, clock for limit-reached states, sourced from the canonical icon library. If no suitable glyph exists there, fall back to the nearest available icon in the library — do not import outside icons.
