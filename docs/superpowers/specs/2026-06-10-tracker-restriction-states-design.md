@@ -26,7 +26,7 @@ Add eight new `State=…` variants to the existing **Task Timer Container** comp
 
 - Component set: `Task Timer Container` (node `27522:282279`) inside section `Timer` (node `27522:282280`) on the page region at node `27464:128248`.
 - Existing variants: `State=Ready` (310×144), `State=Active`, `State=Break`, `State=Idle`, `State=State5` (310×158 each), laid out in one row at 350px column rhythm.
-- New variants: 8 cards, same 310px width, placed in a **second row** below the existing five (y offset ≈ +200), same 350px rhythm. The component-set frame grows in height; nothing else on the page moves.
+- New variants: 8 cards, same 310px width, placed in **two new rows of four** below the existing five (y ≈ 220 and 440), same 350px column rhythm — one row of eight would force the set frame to ~2780px wide. The component-set frame grows in height; nothing else on the page moves.
 - `State=State5` is left untouched (name included).
 
 ## 2. Shared card anatomy
