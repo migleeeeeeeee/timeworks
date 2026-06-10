@@ -34,7 +34,7 @@ Add eight new `State=…` variants to the existing **Task Timer Container** comp
 Every new variant reuses the existing card structure — big circle button (left), time display, caption line, chips row:
 
 - **Blocked states** (Disabled, Daily/Weekly Limit Reached, Shift Upcoming, Shift Ended):
-  - Button: the existing greyed-out **disabled** variant from the `Play Button (big circle)` component set (node `27917:964423`).
+  - Button: a dedicated `State=Disabled` variant added to the `Play Button (big circle)` component set (node `27917:964423`, variant `28403:8158`) — added 2026-06-10 on request. It binds to `button-glass-fill-disabled` / `button-glass-border-disabled` / `disabled-text-color`, reading paler than the neutral grey `State=State5` play.
   - Time digits: static, muted (text-secondary token) — no active styling, no blue border.
   - Caption line: restriction message in `t3` muted text. Disabled and limit-reached states carry a leading 16px icon (lock / clock) from the canonical icon library (node `25336:96509`); shift states are text-only. Messages wrap to two lines; card height grows to ~180px where needed.
 - **In-progress states** (Daily Limit, Weekly Limit, Shift Active):
@@ -78,5 +78,5 @@ Recorded as a Figma annotation next to the relevant variants and here for the ev
 
 - No React/desktop-app (`apps/tasks-tile-view`) changes.
 - No new tokens or token edits.
-- No changes to the older sidebar `Task Timer Container — States` section (`27470:172576`), the Main View frame, or the `Play Button (big circle)` set beyond instancing its existing disabled variant.
+- No changes to the older sidebar `Task Timer Container — States` section (`27470:172576`) or the Main View frame. (The `Play Button (big circle)` set gained one `State=Disabled` variant — see Shared card anatomy.)
 - Backend/admin trigger UI.
