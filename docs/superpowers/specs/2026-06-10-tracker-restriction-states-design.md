@@ -1,6 +1,6 @@
 # Tracker restriction states — Figma design spec
 
-**Status:** spec, awaiting plan
+**Status:** implemented (Figma, 2026-06-10)
 **Date:** 2026-06-10
 **Figma:** component set `Task Timer Container`, node `27522:282279`, section `Timer` (node `27522:282280`), fileKey `gqYWCu1K6dJ9gESXtgNeCi` (Experiment file)
 
