@@ -28,3 +28,16 @@ Screenshot confirmed clone intact.
 
 ## Task 3.5 — org/timezone caption
 - Deleted "Summary Counts" stat tiles on both frames; inserted caption TEXT "Abroadworks · GMT+8 (Asia/Manila)" (Karla Medium 12, bound to secondary-text-color) in their place above the table.
+
+## Task 4 — by-Member table (table `28700:413734`)
+- Columns: Date→Week, Team→Time Spent, Shift→Weekly Limit, Start Time→Percentage Used (PctCell), Required→Remaining; deleted Status/Actual/Late. Widths 300/220/220/420/200.
+- Member name stays in the group header (avatar+name); rows lead with Week.
+- Seeded 10 rows across bands (70,77,80,84,90,95,100,104,112,100); over-limit rows show negative Remaining.
+- **Perf note:** `loadFontAsync` per-node is what blows the 7s `figma_execute` timeout, NOT resize. Fonts persist for the session — preload once (or rely on prior load) and set `.characters` without re-loading.
+
+## Task 5 — Percentage Used bars
+- Linear Progress Bar structure: `Progress bar > [Track, Fill(SLOT) > Fill(RECTANGLE)]`, track 242px, layout NONE.
+- Per cell: instance Primary/Small/Label=Off (`46946:16402`) for ≤100, Negative (`46946:16406`) for >100; resize inner Fill rect to `min(pct,100)/100 × 242`.
+- Amber band (85–100): rebind inner Fill paint to `warning-color` + re-set opacity=1 (token-bind opacity gotcha).
+- Label text `pct%` (Karla Regular 14) appended in a horizontal PctCell; over-limit label bound to `negative-color` (red).
+- Verified: blue 70/77/80/84, amber 90/95/100, red 104/112 with red labels.
