@@ -70,5 +70,9 @@ Screenshot confirmed clone intact.
 - Remaining leaks are DS/template internals only: icon glyph VECTORs (198) and account-avatar "A" initials (5) — inherited chrome shared with sibling report pages, not authored here.
 - **Section absorption fix:** the section had spatially captured two pre-existing page elements (Sparkline `28498:206635`, Manage Widgets modal `28529:397690`) overlapping the Empty frame. Ejected both back to the page at their original absolute position, then relocated the whole section to clear canvas (x0, y29000, below all content at maxY≈28104). Final section has exactly the 6 frames.
 
+## Revisions (post-review)
+- **Table width:** columns were leaving ~396px dead space on the right (content area is 1796−40 padding = 1756). Redistributed to `[360, 320, 320, 440, 316] = 1756` across header + rows on all four tables (by-Member, by-Week, Loading, Filters-Open) so Remaining sits at the right edge.
+- **Filters popover → DS component instance:** replaced the hand-built popover frame with a clone of the DS **Filter Dropdown** (`28326:224825`, main `27842:638817`). Hid the header (`header.visible=false`). Built a content component **"Weekly Limits — Filters Content"** (`28702:425918`: Filters/Saved-Filters tabs + Filter Body/Teams + Filter Body/Members) and `swapComponent`'d it into the body `_Slot` (the slot instance was the body's "Filter Body / Members" child). Set `layoutSizingVertical='HUG'` on slot+body+root so content isn't clipped. Footer: relabeled the two DS buttons to Clear Filters (Secondary) / Save Filters (Primary); hid the Stepper + left checkbox. New popover instance `28702:425800`; content master sits below the section at y≈31700.
+
 ## Result
 Section `28700:413404` "Weekly Limits Report" on page `27823:196653` — 6 frames complete and verified: by-Member, by-Week, Filters Open, Empty, Loading, Progress Bar Variants (ref).
