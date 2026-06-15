@@ -41,3 +41,9 @@ Screenshot confirmed clone intact.
 - Amber band (85–100): rebind inner Fill paint to `warning-color` + re-set opacity=1 (token-bind opacity gotcha).
 - Label text `pct%` (Karla Regular 14) appended in a horizontal PctCell; over-limit label bound to `negative-color` (red).
 - Verified: blue 70/77/80/84, amber 90/95/100, red 104/112 with red labels.
+
+## Task 6 — by-Week table (table `28700:413462`)
+- Columns: Member (avatar+name, kept) · Time Spent · Weekly Limit · Percentage Used · Remaining; deleted Status/Actual/Late.
+- 4 date group headers → week ranges ("SUN, NOV 16, 2025 – SAT, NOV 22, 2025" etc., uppercase).
+- 10 rows seeded across bands; bars added (same builder). Verified clean.
+- Removed leftover "Filter options" template popover that was floating over the table (cloned from by-Date frame).
