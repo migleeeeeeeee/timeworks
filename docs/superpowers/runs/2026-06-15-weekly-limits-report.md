@@ -47,3 +47,10 @@ Screenshot confirmed clone intact.
 - 4 date group headers → week ranges ("SUN, NOV 16, 2025 – SAT, NOV 22, 2025" etc., uppercase).
 - 10 rows seeded across bands; bars added (same builder). Verified clean.
 - Removed leftover "Filter options" template popover that was floating over the table (cloned from by-Date frame).
+
+## Task 7 — Filters popover (frame `28700:419071`, re-cloned from by-Member)
+- Replaced the old Filters-Applied frame by re-cloning the finished by-Member frame into the same slot, then overlaid the popover.
+- Popover `28700:419480`: VERTICAL auto-layout, 382w, radius 12, `Shadow/Large` effect style, absolute-positioned (layoutPositioning='ABSOLUTE') anchored at rel (489,181) under the Filters icon button — required because the frame root is HORIZONTAL auto-layout (Sidebar+Main Container), so a normal child lands in-flow.
+- Tabs header: Filters (selected) / Saved Filters. Body: Filter Body / Teams (`28326:225027`) + Filter Body / Members (`28325:224200`) instances. Footer: Clear Filters (tertiary) + Save Filters (primary).
+- Background: absolute Rectangle "Popover BG" bound to `primary-background-color` (STRETCH constraints).
+- **Capture gotcha:** `figma_capture_screenshot` of the WHOLE frame renders absolute-positioned overlays at reduced opacity (table bleeds through) — a compositing artifact, NOT the real canvas. Capturing the popover node in isolation shows it fully opaque. Verify overlays by capturing the overlay node directly.
