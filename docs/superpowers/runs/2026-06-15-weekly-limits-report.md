@@ -54,3 +54,21 @@ Screenshot confirmed clone intact.
 - Tabs header: Filters (selected) / Saved Filters. Body: Filter Body / Teams (`28326:225027`) + Filter Body / Members (`28325:224200`) instances. Footer: Clear Filters (tertiary) + Save Filters (primary).
 - Background: absolute Rectangle "Popover BG" bound to `primary-background-color` (STRETCH constraints).
 - **Capture gotcha:** `figma_capture_screenshot` of the WHOLE frame renders absolute-positioned overlays at reduced opacity (table bleeds through) — a compositing artifact, NOT the real canvas. Capturing the popover node in isolation shows it fully opaque. Verify overlays by capturing the overlay node directly.
+
+## Task 8 — Empty state (frame `28700:414073`)
+- Transformed in place (kept template astronaut-cat illustration): header/toolbar/caption like by-Member; copy → "No data for the selected range" + "No weekly limit data for Nov 16 – Nov 22, 2025…"; buttons Adjust date range / Clear filters retained.
+- This frame's toolbar keeps the labelled "Filters" button (vs the icon-only one elsewhere) — acceptable variant from the Empty template.
+
+## Task 9 — Loading state (frame `28702:421564`, cloned from by-Member)
+- Replaced every row cell's content with a Skeleton rectangle (radius 4, ~55% cell width, bound to `secondary-background-color`); member group headers kept live. 50 skeletons.
+
+## Task 10 — Progress Bar Variants reference (frame `28702:422374`)
+- Standalone card: title + 3 rows — Under limit (blue 77%), At limit (amber 100%), Over limit (red 112%, red label). Same bar builder.
+
+## Task 11 — QA
+- Token-leak audit: fixed 20 unbound percentage labels (→ `primary-text-color`, over-limit → `negative-color`) and 5 raw-white account-avatar backgrounds (→ `primary-background-color`).
+- Remaining leaks are DS/template internals only: icon glyph VECTORs (198) and account-avatar "A" initials (5) — inherited chrome shared with sibling report pages, not authored here.
+- **Section absorption fix:** the section had spatially captured two pre-existing page elements (Sparkline `28498:206635`, Manage Widgets modal `28529:397690`) overlapping the Empty frame. Ejected both back to the page at their original absolute position, then relocated the whole section to clear canvas (x0, y29000, below all content at maxY≈28104). Final section has exactly the 6 frames.
+
+## Result
+Section `28700:413404` "Weekly Limits Report" on page `27823:196653` — 6 frames complete and verified: by-Member, by-Week, Filters Open, Empty, Loading, Progress Bar Variants (ref).
