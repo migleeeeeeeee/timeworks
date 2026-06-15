@@ -93,6 +93,8 @@ export function App() {
           />
           <MainContent
             tasks={s.filteredTasks}
+            scope={s.scope}
+            onScopeChange={s.setScope}
             searchQuery={s.searchQuery}
             onSearchChange={s.setSearchQuery}
             onSelectTask={s.openTask}

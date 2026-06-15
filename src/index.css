@@ -1,0 +1,30 @@
+/**
+ * Global styles
+ *
+ * Token CSS variables are generated from src/tokens/source/*.json by
+ * scripts/build-tokens.mjs (run `npm run tokens:build`). The generated file
+ * is imported below as the @theme block — do not inline token values here.
+ *
+ * Components use Tailwind classes only — never extend this file.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Karla:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "./tokens/dist/css/variables.css";
+
+html,
+body {
+  font-family: var(--font-body);
+}
+
+/* Respect reduced motion preferences across the system. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

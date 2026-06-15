@@ -8,6 +8,9 @@ export type Project = {
   id: string
   name: string
   timeSpent: string  // "HH:MM" — pre-formatted, sidebar displays verbatim
+  pinned?: boolean
+  deadline?: string  // pre-formatted, e.g. "Jun 30"
+  taskCount?: number
 }
 
 export type TaskStatus = "open" | "in_progress" | "blocked" | "done"

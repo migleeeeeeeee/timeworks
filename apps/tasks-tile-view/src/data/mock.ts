@@ -19,12 +19,21 @@ const PEOPLE: Assignee[] = [
   { id: "u6", name: "Frey Olsen", avatarUrl: AVATAR("Frey") },
 ]
 
+export const CURRENT_USER_ID = "u1"
+
 export const projects: Project[] = [
-  { id: "p1", name: "EverTech", timeSpent: "01:22" },
-  { id: "p2", name: "NorthPeak", timeSpent: "00:48" },
-  { id: "p3", name: "Helios", timeSpent: "02:05" },
-  { id: "p4", name: "BlueRiver", timeSpent: "00:13" },
-  { id: "p5", name: "Magnolia", timeSpent: "00:00" },
+  {
+    id: "p1",
+    name: "Client Portal Redesign",
+    timeSpent: "01:22:00",
+    pinned: true,
+    deadline: "Jun 30",
+    taskCount: 24,
+  },
+  { id: "p2", name: "NorthPeak", timeSpent: "00:48:00" },
+  { id: "p3", name: "Helios", timeSpent: "02:05:00" },
+  { id: "p4", name: "BlueRiver", timeSpent: "00:13:00" },
+  { id: "p5", name: "Magnolia", timeSpent: "00:00:00" },
 ]
 
 const mk = (

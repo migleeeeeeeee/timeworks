@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "anthropic.claude-code",
+    "bradlc.vscode-tailwindcss",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "usernamehw.errorlens",
+    "vunguyentuan.vscode-css-variables",
+    "stivo.tailwind-fold",
+    "yoavbls.pretty-ts-errors"
+  ]
+}

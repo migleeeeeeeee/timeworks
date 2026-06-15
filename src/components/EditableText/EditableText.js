@@ -1,0 +1,102 @@
+import { jsx as _jsx } from "react/jsx-runtime";
+import { forwardRef, useCallback, useImperativeHandle, useRef, useState, } from "react";
+import { cva } from "class-variance-authority";
+import { cn } from "../../lib/cn";
+/**
+ * EditableText — body-text input sourced from the TimeWorks Figma file
+ * (page "Editable text", component 46946:4612).
+ *
+ *   <EditableText defaultValue="Item name" variant="t1" />
+ *   <EditableText value={label} onValueChange={setLabel} variant="t2" weight="semibold" />
+ *   <EditableText defaultValue="Read only" readOnly variant="t3" />
+ *
+ * Reads as inline body copy until hover/focus, then reveals a 1px border
+ * (`color-border-ui` on hover, `color-primary` on focus) so users discover
+ * it's editable. Enter commits and blurs; Escape reverts to the last
+ * committed value and blurs.
+ *
+ * Three sizes (t1 / t2 / t3) and per-Figma weights:
+ *   t1, t2 → bold | semibold | regular
+ *   t3     → semibold | regular   (no bold variant per the Figma matrix)
+ */
+const root = cva([
+    // Reset native input chrome.
+    "appearance-none bg-transparent outline-none",
+    "border border-transparent rounded-sm",
+    "text-[var(--color-primary-text-color)]",
+    "placeholder:text-[var(--color-secondary-text-color)]",
+    "transition-colors duration-[120ms] ease-out",
+    "font-body",
+    // Default: p-1. Hover/focus: switch to px-2 to match Figma.
+    "px-1 py-1",
+    // Hover only when NOT focused — otherwise the focus-color border gets
+    // overwritten by the hover-color border on click-and-hold.
+    "[&:hover:not(:focus-visible)]:border-[var(--color-ui-border-color)]",
+    "hover:px-2",
+    "focus-visible:border-[var(--color-primary-color)] focus-visible:bg-[var(--color-primary-background-color)] focus-visible:px-2",
+    "read-only:cursor-default read-only:hover:border-transparent read-only:hover:px-1",
+    "read-only:focus-visible:border-transparent read-only:focus-visible:px-1",
+    "disabled:cursor-not-allowed disabled:text-[var(--color-disabled-text-color)]",
+    "disabled:hover:border-transparent disabled:hover:px-1",
+].join(" "), {
+    variants: {
+        variant: {
+            t1: "text-t1",
+            t2: "text-t2",
+            t3: "text-t3",
+        },
+        weight: {
+            regular: "font-normal",
+            semibold: "font-semibold",
+            bold: "font-bold",
+        },
+    },
+    defaultVariants: {
+        variant: "t1",
+        weight: "bold",
+    },
+});
+export const EditableText = forwardRef(function EditableText({ variant = "t1", weight = "bold", value, defaultValue, onValueChange, onCommit, onKeyDown, onBlur, onFocus, placeholder = "Editable text component", disabled = false, readOnly = false, className, "aria-label": ariaLabel, ...rest }, ref) {
+    const isControlled = value !== undefined;
+    const [internalValue, setInternalValue] = useState(defaultValue ?? "");
+    const currentValue = isControlled ? value : internalValue;
+    // Snapshot the value on focus so Esc can revert to it.
+    const lastCommittedRef = useRef(currentValue);
+    const inputRef = useRef(null);
+    useImperativeHandle(ref, () => inputRef.current, []);
+    const handleChange = useCallback((event) => {
+        const next = event.target.value;
+        if (!isControlled)
+            setInternalValue(next);
+        onValueChange?.(next);
+    }, [isControlled, onValueChange]);
+    const commit = useCallback((next) => {
+        if (next !== lastCommittedRef.current) {
+            onCommit?.(next);
+            lastCommittedRef.current = next;
+        }
+    }, [onCommit]);
+    const handleKeyDown = useCallback((event) => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            commit(currentValue);
+            inputRef.current?.blur();
+        }
+        else if (event.key === "Escape") {
+            event.preventDefault();
+            const reverted = lastCommittedRef.current;
+            if (!isControlled)
+                setInternalValue(reverted);
+            onValueChange?.(reverted);
+            inputRef.current?.blur();
+        }
+        onKeyDown?.(event);
+    }, [commit, currentValue, isControlled, onKeyDown, onValueChange]);
+    return (_jsx("input", { ref: inputRef, type: "text", value: currentValue, placeholder: placeholder, disabled: disabled, readOnly: readOnly, "aria-label": ariaLabel ?? placeholder, onChange: handleChange, onKeyDown: handleKeyDown, onFocus: (event) => {
+            lastCommittedRef.current = event.target.value;
+            onFocus?.(event);
+        }, onBlur: (event) => {
+            commit(event.target.value);
+            onBlur?.(event);
+        }, className: cn(root({ variant, weight }), className), ...rest }));
+});

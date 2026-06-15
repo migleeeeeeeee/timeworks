@@ -1,0 +1,33 @@
+# Build output
+dist/
+build/
+storybook-static/
+src/tokens/dist/
+
+# Dependencies
+node_modules/
+
+# Lockfiles (Claude doesn't need to read these)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Logs
+*.log
+.npm/
+.pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+
+# Cache
+.cache/
+.vite/
+.turbo/

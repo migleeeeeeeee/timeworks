@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+storybook-static/
+
+# Generated tokens (regenerate with `npm run tokens:build`)
+src/tokens/dist/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo
+
+# Cache
+.cache/
+.vite/
+.turbo/
+.eslintcache
+
+# Coverage
+coverage/
+*.lcov
+
+# Claude Code harness artifacts
+.claude/worktrees/
+.claude/scheduled_tasks.lock

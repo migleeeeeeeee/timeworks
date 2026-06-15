@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { Task, TimerState, View } from "../types"
-import { initialTimer, tasks as allTasks } from "../data/mock"
+import { CURRENT_USER_ID, initialTimer, tasks as allTasks } from "../data/mock"
+
+export type Scope = "me" | "all"
 
 export type AppState = {
   view: View
   setView: (v: View) => void
+
+  scope: Scope
+  setScope: (s: Scope) => void
 
   searchQuery: string
   setSearchQuery: (q: string) => void
@@ -22,12 +27,13 @@ export type AppState = {
   timer: TimerState
   toggleTimer: () => void
 
-  /** Tasks filtered by view + search + project selection. */
+  /** Tasks filtered by view + scope + search + project selection. */
   filteredTasks: Task[]
 }
 
 export function useAppState(): AppState {
   const [view, setView] = useState<View>("timeworks")
+  const [scope, setScope] = useState<Scope>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [compact, setCompact] = useState(false)
@@ -53,13 +59,21 @@ export function useAppState(): AppState {
       if (view === "chatworks") return false // demo: the other tab is empty
       if (selectedProjectId && t.projectId !== selectedProjectId) return false
       if (q && !t.title.toLowerCase().includes(q)) return false
+      if (scope === "me") {
+        const involved =
+          t.responsible.id === CURRENT_USER_ID ||
+          t.members.some((m) => m.id === CURRENT_USER_ID)
+        if (!involved) return false
+      }
       return true
     })
-  }, [view, searchQuery, selectedProjectId])
+  }, [view, scope, searchQuery, selectedProjectId])
 
   return {
     view,
     setView,
+    scope,
+    setScope,
     searchQuery,
     setSearchQuery,
     selectedProjectId,

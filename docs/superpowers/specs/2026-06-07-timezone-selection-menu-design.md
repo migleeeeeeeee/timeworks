@@ -26,6 +26,23 @@ grouping but rewrites the copy in plain language and adds a clear selected cue.
 - **Value format:** `City, Country (ABBR)` — e.g. `New York, USA (EDT)`.
 - **Selected cue:** active row gets a `Check` icon (right) + value in primary indigo.
 
+## Revision 2026-06-07 — Filters Modal reference alignment
+
+The menu was restyled to match the DS **Filters Modal** (node `28288:125395`) as the
+canonical surface/selection language. This supersedes a few earlier "locked" values:
+
+- **Surface:** solid `primary-background-color` (#FAFBFD), radius **16**, **no stroke**
+  (elevation carried by the standard raw drop-shadow: radius 20 / y6 / black 20%, the
+  same shadow the Filters Modal uses — this file binds no `shadow-*` effect style).
+- **Labels:** Karla **SemiBold 12/16, UPPERCASE** (`textCase: UPPER`), `secondary-text-color`.
+- **Selected cue:** full-width **`primary-selected-color`** (#C7D9FF) row highlight,
+  radius 6 — value text stays **`primary-text-color`** (dark, for contrast on the
+  lavender); accent is the highlight + a `primary-color` check (right-aligned).
+- **Type:** raw Karla at t-scale sizes with bound color vars (no Figma text styles —
+  consistent with the rest of this file).
+
+Applied directly to the existing build (node `28292:162342`); see the run log.
+
 ## Anatomy
 
 Built on the DS **Popover** (Radix Popover under the hood) — anchored, dismiss on

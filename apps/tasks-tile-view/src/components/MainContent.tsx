@@ -3,9 +3,12 @@ import { PageHeader } from "./PageHeader"
 import { PageToolbar } from "./PageToolbar"
 import { TaskTilesGrid } from "./TaskTilesGrid"
 import type { Task } from "../types"
+import type { Scope } from "../state/AppState"
 
 type Props = {
   tasks: Task[]
+  scope: Scope
+  onScopeChange: (s: Scope) => void
   searchQuery: string
   onSearchChange: (q: string) => void
   onSelectTask: (id: string) => void
@@ -14,6 +17,8 @@ type Props = {
 
 export function MainContent({
   tasks,
+  scope,
+  onScopeChange,
   searchQuery,
   onSearchChange,
   onSelectTask,
@@ -27,7 +32,12 @@ export function MainContent({
         <BreadcrumbItem current>Workspace</BreadcrumbItem>
       </Breadcrumb>
       <PageHeader />
-      <PageToolbar searchQuery={searchQuery} onSearchChange={onSearchChange} />
+      <PageToolbar
+        scope={scope}
+        onScopeChange={onScopeChange}
+        searchQuery={searchQuery}
+        onSearchChange={onSearchChange}
+      />
       <TaskTilesGrid tasks={tasks} onSelectTask={onSelectTask} compact={compact} />
     </main>
   )
